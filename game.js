@@ -84,6 +84,9 @@ const GAME_STATE = {
     GAME_OVER: 'gameOver'
 };
 
+// ゲーム定数
+const POINTS_TO_WIN = 5; // 1試合の勝利に必要な得点
+
 // エフェクト関連の設定
 const PARTICLE_COUNT = 20;
 const PARTICLE_LIFETIME = 30;
@@ -131,12 +134,24 @@ class Particle {
     }
 }
 
+// ゲーム変数の初期化
 let currentState = GAME_STATE.START;
-const POINTS_TO_WIN = 5; // 1試合の勝利に必要な得点
+let magnetCooldown = false;
+let playerScore = 0;
+let aiScore = 0;
 let totalPlayerScore = 0;
 let totalAiScore = 0;
 let lastMatchPlayerScore = 0;
 let lastMatchAiScore = 0;
+let aiPaddleX = 0;
+let playerPaddleX = 0;
+let puck = {
+    x: 0,
+    y: 0,
+    dx: 0,
+    dy: 0,
+    radius: 0
+};
 
 // ゲーム要素の初期設定（サイズはresizeCanvasで更新）
 let paddleWidth = 60;
@@ -149,22 +164,16 @@ const AI_PREDICTION_ERROR = 10;
 const MAX_PUCK_SPEED = 15;
 const INITIAL_PUCK_SPEED = 7;
 
-// スコア
-let playerScore = 0;
-let aiScore = 0;
-
-// パドルの位置
-let aiPaddleX;
-let playerPaddleX;
-
-// パックの位置と速度
-let puck = {
-    x: 0,
-    y: 0,
-    dx: 0,
-    dy: 0,
-    radius: puckSize / 2
-};
+// UI要素の取得
+const startScreen = document.getElementById('startScreen');
+const pauseScreen = document.getElementById('pauseScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const upgradeScreen = document.getElementById('upgradeScreen');
+const startButton = document.getElementById('startButton');
+const resumeButton = document.getElementById('resumeButton');
+const restartButton = document.getElementById('restartButton');
+const playAgainButton = document.getElementById('playAgainButton');
+const winnerMessage = document.getElementById('winnerMessage');
 
 // キー入力の状態
 const keys = {
@@ -254,16 +263,6 @@ window.addEventListener('resize', () => {
 window.addEventListener('orientationchange', () => {
     setTimeout(resizeCanvas, 100);
 });
-
-// UI要素
-const startScreen = document.getElementById('startScreen');
-const pauseScreen = document.getElementById('pauseScreen');
-const gameOverScreen = document.getElementById('gameOverScreen');
-const startButton = document.getElementById('startButton');
-const resumeButton = document.getElementById('resumeButton');
-const restartButton = document.getElementById('restartButton');
-const playAgainButton = document.getElementById('playAgainButton');
-const winnerMessage = document.getElementById('winnerMessage');
 
 // ボタンのイベントリスナー
 startButton.addEventListener('click', startGame);
@@ -644,23 +643,13 @@ function resetForNextMatch() {
     resetPuck(true);
 }
 
-// 変数の初期化
-let magnetCooldown = false;
-let playerScore = 0;
-let aiScore = 0;
-let aiPaddleX;
-let playerPaddleX;
-let puck;
-
 // パックの初期化
 function initializePuck() {
-    puck = {
-        x: canvas.width / 2,
-        y: canvas.height / 2,
-        dx: 0,
-        dy: 0,
-        radius: puckSize / 2
-    };
+    puck.x = canvas.width / 2;
+    puck.y = canvas.height / 2;
+    puck.dx = 0;
+    puck.dy = 0;
+    puck.radius = puckSize / 2;
 }
 
 // パドルの初期位置設定
