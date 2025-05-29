@@ -80,6 +80,7 @@ const GAME_STATE = {
     START: 'start',
     PLAYING: 'playing',
     PAUSED: 'paused',
+    UPGRADE: 'upgrade',
     GAME_OVER: 'gameOver'
 };
 
@@ -131,7 +132,11 @@ class Particle {
 }
 
 let currentState = GAME_STATE.START;
-const WINNING_SCORE = 5;
+const POINTS_TO_WIN = 5; // 1試合の勝利に必要な得点
+let totalPlayerScore = 0;
+let totalAiScore = 0;
+let lastMatchPlayerScore = 0;
+let lastMatchAiScore = 0;
 
 // ゲーム要素の初期設定（サイズはresizeCanvasで更新）
 let paddleWidth = 60;
@@ -165,7 +170,8 @@ let puck = {
 const keys = {
     ArrowLeft: false,
     ArrowRight: false,
-    Escape: false
+    Escape: false,
+    Space: false
 };
 
 // タッチイベントの処理
@@ -284,6 +290,10 @@ function resumeGame() {
 function resetGame() {
     playerScore = 0;
     aiScore = 0;
+    totalPlayerScore = 0;
+    totalAiScore = 0;
+    lastMatchPlayerScore = 0;
+    lastMatchAiScore = 0;
     currentState = GAME_STATE.PLAYING;
     updateScore();
     resetPuck(true);
@@ -292,19 +302,10 @@ function resetGame() {
     gameOverScreen.classList.add('hidden');
 }
 
-function checkWinner() {
-    if (playerScore >= WINNING_SCORE || aiScore >= WINNING_SCORE) {
-        currentState = GAME_STATE.GAME_OVER;
-        gameOverScreen.classList.remove('hidden');
-        winnerMessage.textContent = playerScore >= WINNING_SCORE ?
-            'おめでとうございます！あなたの勝ちです！' :
-            'AIの勝ちです。もう一度チャレンジしましょう！';
-    }
-}
-
 function updateScore() {
     document.getElementById('player1Score').textContent = aiScore;
     document.getElementById('player2Score').textContent = playerScore;
+    document.getElementById('currentMatch').textContent = upgradeManager.matchCount + 1;
 }
 
 // AIの移動制御
@@ -345,15 +346,38 @@ function moveAI() {
 function movePlayer() {
     if (currentState !== GAME_STATE.PLAYING) return;
 
+    const speedMultiplier = upgradeManager.getUpgradeEffect(UPGRADE_TYPES.PADDLE, 'paddleSpeedMultiplier');
+    const PLAYER_SPEED = canvas.width * 0.02 * speedMultiplier;
+
     if (!isMobile) {
-        // キーボード操作
-        const PLAYER_SPEED = canvas.width * 0.02;
         if (keys.ArrowLeft && playerPaddleX > 0) {
             playerPaddleX -= PLAYER_SPEED;
         }
         if (keys.ArrowRight && playerPaddleX < canvas.width - paddleWidth) {
             playerPaddleX += PLAYER_SPEED;
         }
+    }
+
+    // マグネットパドルの効果
+    if (upgradeManager.hasUpgrade('magnetPaddle') && keys.Space && !magnetCooldown) {
+        const upgrade = upgradeManager.activeUpgrades.get('magnetPaddle');
+        applyMagneticEffect(upgrade.effect.magneticForce);
+        magnetCooldown = true;
+        setTimeout(() => {
+            magnetCooldown = false;
+        }, upgrade.effect.cooldown);
+    }
+}
+
+// マグネット効果の適用
+function applyMagneticEffect(force) {
+    const dx = playerPaddleX + paddleWidth / 2 - puck.x;
+    const dy = canvas.height - paddleHeight - puck.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance < canvas.height / 2) {
+        puck.dx += (dx / distance) * force;
+        puck.dy += (dy / distance) * force;
+        limitPuckSpeed();
     }
 }
 
@@ -381,15 +405,39 @@ function createFlash(color) {
 }
 
 // パドルとの衝突判定と処理
-function handlePaddleCollision(paddleX, paddleY, isTopPaddle) {
-    const paddleCenterX = paddleX + paddleWidth / 2;
+function handlePaddleCollisions() {
+    const paddleWidthMultiplier = upgradeManager.getUpgradeEffect(UPGRADE_TYPES.PADDLE, 'paddleWidthMultiplier');
+    const effectivePaddleWidth = paddleWidth * paddleWidthMultiplier;
+    const paddleOffset = (effectivePaddleWidth - paddleWidth) / 2;
+
+    // AIのパドル（上側）との衝突
+    if (puck.y - puck.radius < paddleHeight &&
+        puck.x > aiPaddleX - paddleOffset &&
+        puck.x < aiPaddleX + effectivePaddleWidth &&
+        puck.dy < 0) {
+        handlePaddleCollision(aiPaddleX - paddleOffset, 0, true, effectivePaddleWidth);
+    }
+
+    // プレイヤーのパドル（下側）との衝突
+    if (puck.y + puck.radius > canvas.height - paddleHeight &&
+        puck.x > playerPaddleX - paddleOffset &&
+        puck.x < playerPaddleX + effectivePaddleWidth &&
+        puck.dy > 0) {
+        handlePaddleCollision(playerPaddleX - paddleOffset, canvas.height - paddleHeight, false, effectivePaddleWidth);
+    }
+}
+
+// パドルとの衝突時の処理
+function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWidth) {
+    const paddleCenterX = paddleX + effectivePaddleWidth / 2;
     const hitX = puck.x - paddleCenterX;
-    const normalizedHitX = hitX / (paddleWidth / 2);
+    const normalizedHitX = hitX / (effectivePaddleWidth / 2);
 
-    const baseSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
+    let baseSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
+    const reflectSpeedMultiplier = upgradeManager.getUpgradeEffect(UPGRADE_TYPES.PADDLE, 'reflectSpeedMultiplier');
+    const newSpeed = baseSpeed * 1.1 * reflectSpeedMultiplier;
+
     const angle = normalizedHitX * Math.PI / 3;
-    const newSpeed = baseSpeed * 1.1;
-
     puck.dx = Math.sin(angle) * newSpeed;
     puck.dy = (isTopPaddle ? 1 : -1) * Math.cos(angle) * newSpeed;
 
@@ -403,6 +451,19 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle) {
 // パックの移動と衝突判定
 function movePuck() {
     if (currentState !== GAME_STATE.PLAYING) return;
+
+    // カーブショットの効果
+    if (upgradeManager.hasUpgrade('curveShot')) {
+        const curveFactor = upgradeManager.activeUpgrades.get('curveShot').effect.curveFactor;
+        puck.dx += (Math.random() - 0.5) * curveFactor;
+    }
+
+    // ヘビーパックの効果
+    if (upgradeManager.hasUpgrade('heavyPuck')) {
+        const effect = upgradeManager.activeUpgrades.get('heavyPuck').effect;
+        puck.dx *= effect.speedMultiplier;
+        puck.dy *= effect.speedMultiplier;
+    }
 
     puck.x += puck.dx;
     puck.y += puck.dy;
@@ -418,23 +479,8 @@ function movePuck() {
         createParticles(puck.x, puck.y, '#fff');
     }
 
-    // AIのパドル（上側）との衝突
-    if (puck.y - puck.radius < paddleHeight &&
-        puck.x > aiPaddleX &&
-        puck.x < aiPaddleX + paddleWidth &&
-        puck.dy < 0) {
-        handlePaddleCollision(aiPaddleX, 0, true);
-    }
-
-    // プレイヤーのパドル（下側）との衝突
-    if (puck.y + puck.radius > canvas.height - paddleHeight &&
-        puck.x > playerPaddleX &&
-        puck.x < playerPaddleX + paddleWidth &&
-        puck.dy > 0) {
-        handlePaddleCollision(playerPaddleX, canvas.height - paddleHeight, false);
-    }
-
-    limitPuckSpeed();
+    // パドルとの衝突判定と処理
+    handlePaddleCollisions();
 
     // ゴール判定
     if (puck.y < 0) {
@@ -442,8 +488,9 @@ function movePuck() {
         updateScore();
         createParticles(puck.x, 0, '#4ecdc4');
         createFlash('#4ecdc433');
-        checkWinner();
-        if (currentState === GAME_STATE.PLAYING) {
+        if (playerScore >= POINTS_TO_WIN) {
+            handleMatchEnd();
+        } else {
             resetPuck(false);
         }
     } else if (puck.y > canvas.height) {
@@ -451,8 +498,9 @@ function movePuck() {
         updateScore();
         createParticles(puck.x, canvas.height, '#ff6b6b');
         createFlash('#ff6b6b33');
-        checkWinner();
-        if (currentState === GAME_STATE.PLAYING) {
+        if (aiScore >= POINTS_TO_WIN) {
+            handleMatchEnd();
+        } else {
             resetPuck(true);
         }
     }
@@ -493,11 +541,7 @@ function draw() {
     ctx.setLineDash([]);
 
     // パドルの描画
-    ctx.fillStyle = '#ff6b6b';
-    ctx.fillRect(aiPaddleX, 0, paddleWidth, paddleHeight);
-
-    ctx.fillStyle = '#4ecdc4';
-    ctx.fillRect(playerPaddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
+    drawPaddles();
 
     // パックの描画
     ctx.beginPath();
@@ -528,7 +572,106 @@ function getAISpeed() {
     return canvas.width * 0.02;
 }
 
+// 試合終了時の処理
+function handleMatchEnd() {
+    lastMatchPlayerScore = playerScore;
+    lastMatchAiScore = aiScore;
+    totalPlayerScore += playerScore;
+    totalAiScore += aiScore;
+
+    const matchCount = upgradeManager.incrementMatch();
+
+    if (matchCount >= 3) {
+        // 3試合終了時
+        currentState = GAME_STATE.GAME_OVER;
+        gameOverScreen.classList.remove('hidden');
+        document.getElementById('finalScore').textContent = `${totalAiScore} - ${totalPlayerScore}`;
+        winnerMessage.textContent = totalPlayerScore > totalAiScore ?
+            'おめでとうございます！あなたの勝ちです！' :
+            totalPlayerScore < totalAiScore ?
+            'AIの勝ちです。もう一度チャレンジしましょう！' :
+            '引き分けです！';
+    } else {
+        // アップグレード選択画面を表示
+        showUpgradeScreen();
+    }
+}
+
+// アップグレード選択画面の表示
+function showUpgradeScreen() {
+    currentState = GAME_STATE.UPGRADE;
+    const upgradeScreen = document.getElementById('upgradeScreen');
+    const upgradeChoices = document.querySelector('.upgrade-choices');
+    const lastMatchScore = document.getElementById('lastMatchScore');
+    const totalScoreElement = document.getElementById('totalScore');
+
+    // スコアの更新
+    lastMatchScore.textContent = `${lastMatchAiScore} - ${lastMatchPlayerScore}`;
+    totalScoreElement.textContent = `${totalAiScore} - ${totalPlayerScore}`;
+
+    // 選択肢をクリア
+    upgradeChoices.innerHTML = '';
+
+    // 新しい選択肢を生成
+    const choices = generateUpgradeChoices(3);
+    choices.forEach(upgrade => {
+        const choice = document.createElement('div');
+        choice.className = `upgrade-choice rarity-${upgrade.rarity}`;
+        choice.innerHTML = `
+            <h3>${upgrade.name}</h3>
+            <p>${upgrade.description}</p>
+        `;
+        choice.addEventListener('click', () => selectUpgrade(upgrade));
+        upgradeChoices.appendChild(choice);
+    });
+
+    upgradeScreen.classList.remove('hidden');
+}
+
+// アップグレードの選択
+function selectUpgrade(upgrade) {
+    upgradeManager.addUpgrade(upgrade);
+    document.getElementById('upgradeScreen').classList.add('hidden');
+    resetForNextMatch();
+}
+
+// 次の試合の準備
+function resetForNextMatch() {
+    playerScore = 0;
+    aiScore = 0;
+    currentState = GAME_STATE.PLAYING;
+    updateScore();
+    resetPuck(true);
+}
+
+// 変数の初期化
+let magnetCooldown = false;
+let playerScore = 0;
+let aiScore = 0;
+let aiPaddleX;
+let playerPaddleX;
+let puck;
+
+// パックの初期化
+function initializePuck() {
+    puck = {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        dx: 0,
+        dy: 0,
+        radius: puckSize / 2
+    };
+}
+
+// パドルの初期位置設定
+function initializePaddles() {
+    aiPaddleX = canvas.width / 2 - paddleWidth / 2;
+    playerPaddleX = canvas.width / 2 - paddleWidth / 2;
+}
+
 // 初期化
 resizeCanvas();
-resetPuck(true);
+initializePaddles();
+initializePuck();
+resetGame();
 gameLoop();
