@@ -670,7 +670,7 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     // アップグレードエフェクトの適用
     if (puck.lastHitUpgrade && effectSystem) {
         // ビジュアルエフェクトの作成
-        if (puck.lastHitUpgrade.visualEffect) {
+        if (puck.lastHitUpgrade.visualEffect && typeof EFFECT_TYPES !== 'undefined') {
             const effectX = puck.x;
             const effectY = puck.y;
 
@@ -880,7 +880,7 @@ function drawPuck() {
     ctx.fill();
 
     // アクティブなアップグレードに基づくエフェクトの描画
-    if (puck.lastHitUpgrade && puck.lastHitUpgrade.visualEffect) {
+    if (puck.lastHitUpgrade && puck.lastHitUpgrade.visualEffect && typeof EFFECT_TYPES !== 'undefined') {
         const effect = puck.lastHitUpgrade.visualEffect;
 
         // 軌跡エフェクト
@@ -945,7 +945,7 @@ function drawPaddles() {
     ctx.fillRect(playerPaddleX - paddleOffset, canvas.height - paddleHeight, effectivePaddleWidth, paddleHeight);
 
     // パドルのエフェクト
-    if (upgradeManager) {
+    if (upgradeManager && typeof EFFECT_TYPES !== 'undefined') {
         const paddleEffects = upgradeManager.getUpgradesWithEffectType(EFFECT_TYPES.PADDLE);
         paddleEffects.forEach(upgrade => {
             if (upgrade.visualEffect && upgrade.visualEffect.afterImage) {
@@ -1256,6 +1256,12 @@ function showErrorMessage(message, duration = 5000) {
 // エフェクトの適用を最適化
 function applyEffects(x, y, effects) {
     if (!effectSystem || !effects) return;
+
+    // EFFECT_TYPESが定義されていない場合は早期リターン
+    if (typeof EFFECT_TYPES === 'undefined') {
+        console.warn('EFFECT_TYPES is not defined');
+        return;
+    }
 
     const batchedEffects = effects.reduce((acc, effect) => {
         if (!acc[effect.type]) {
