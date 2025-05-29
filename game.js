@@ -139,6 +139,8 @@ let flashColor = '#fff';
 let touchX = null;
 let lastTouchX = null;
 let touchStartTime = 0;
+let touchVelocity = 0; // タッチ操作時の速度
+let lastTouchTime = 0; // 前フレームのタッチ時刻
 
 // パーティクルクラス
 class Particle {
@@ -203,6 +205,9 @@ let puck = {
     spin: 0, // 回転値 (-1 to 1)
     spinDecay: 0.98, // 回転減衰率
     lastShotType: 'normal', // 'normal', 'critical', 'slide', 'angle'
+    // アングルショット用減速効果
+    angleDecayFactor: 1.0, // アングルショット後の減速係数
+    angleDecayDuration: 0, // 減速効果の残り時間（フレーム数）
     // イージング用変数
     targetDx: 0, // 目標速度X
     targetDy: 0, // 目標速度Y
@@ -275,6 +280,8 @@ function handleTouchStart(e) {
     touchX = e.touches[0].clientX;
     lastTouchX = touchX;
     touchStartTime = Date.now();
+    lastTouchTime = Date.now(); // タッチ時刻も初期化
+    touchVelocity = 0; // タッチ速度をリセット
 }
 
 function handleTouchMove(e) {
@@ -282,18 +289,29 @@ function handleTouchMove(e) {
     if (currentState !== GAME_STATE.PLAYING || !touchX) return;
 
     const currentX = e.touches[0].clientX;
+    const currentTime = Date.now();
     const deltaX = currentX - lastTouchX;
+    const deltaTime = currentTime - lastTouchTime;
+
+    // タッチ速度を計算（スムージング付き）
+    if (deltaTime > 0) {
+        const instantVelocity = deltaX / (deltaTime / 16.67); // 60FPS基準に正規化
+        touchVelocity = touchVelocity * 0.7 + instantVelocity * 0.3; // スムージング
+    }
 
     // パドルの移動
     playerPaddleX = Math.max(0, Math.min(canvas.width - paddleWidth, playerPaddleX + deltaX));
 
     lastTouchX = currentX;
+    lastTouchTime = currentTime;
 }
 
 function handleTouchEnd(e) {
     e.preventDefault();
     touchX = null;
     lastTouchX = null;
+    touchVelocity = 0; // タッチ速度をリセット
+    lastTouchTime = 0; // タッチ時刻もリセット
 }
 
 // タッチイベントリスナーの設定
@@ -564,7 +582,14 @@ function movePlayer() {
     playerPaddleX = Math.max(0, Math.min(canvas.width - paddleWidth, playerPaddleX));
 
     // パドル速度を計算（テクニック検出用）
-    playerPaddleVelocity = playerPaddleX - lastPlayerPaddleX;
+    // タッチ操作とキーボード操作の両方に対応
+    if (isMobile && touchX !== null) {
+        // タッチ操作時は計算済みのタッチ速度を使用
+        playerPaddleVelocity = touchVelocity;
+    } else {
+        // キーボード操作時は位置の差分で計算
+        playerPaddleVelocity = playerPaddleX - lastPlayerPaddleX;
+    }
 }
 
 // マグネット効果の適用
@@ -832,6 +857,23 @@ function movePuck() {
         puck.spin *= puck.spinDecay;
     }
 
+    // アングルショット後の継続的な減速効果
+    if (puck.angleDecayDuration > 0) {
+        // 毎フレーム速度を減速
+        puck.targetDx *= puck.angleDecayFactor;
+        puck.targetDy *= puck.angleDecayFactor;
+        puck.dx *= puck.angleDecayFactor;
+        puck.dy *= puck.angleDecayFactor;
+
+        // 減速効果の残り時間を減らす
+        puck.angleDecayDuration--;
+
+        // 効果が終了したらリセット
+        if (puck.angleDecayDuration <= 0) {
+            puck.angleDecayFactor = 1.0;
+        }
+    }
+
     // イージングを適用（高速時のみ）
     const currentSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
     if (currentSpeed > MAX_PUCK_SPEED * 0.6) {
@@ -958,8 +1000,10 @@ function resetPuck(aiServe) {
     puck.activeEffects.clear();
     puck.lastHitTime = 0;
     puck.lastHitUpgrade = null;
-    puck.spin = 0; // 回転もリセット
-    puck.lastShotType = 'normal'; // ショットタイプもリセット
+    puck.spin = 0; // 回転を初期化
+    puck.lastShotType = 'normal'; // ショットタイプを初期化
+    puck.angleDecayFactor = 1.0; // アングルショット減速効果も初期化
+    puck.angleDecayDuration = 0;
     puckTrail = [];
 }
 
@@ -1435,6 +1479,8 @@ function initializePuck() {
     puck.lastHitUpgrade = null;
     puck.spin = 0; // 回転を初期化
     puck.lastShotType = 'normal'; // ショットタイプを初期化
+    puck.angleDecayFactor = 1.0; // アングルショット減速効果も初期化
+    puck.angleDecayDuration = 0;
     puckTrail = [];
 }
 
@@ -1812,26 +1858,33 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     let knockbackPower = 1.0;
     let angleAdjustment = 1.0;
 
-    // テクニック判定
-    const centerHitThreshold = 0.3; // パドル中心の範囲（さらに拡大）
-    const slideThreshold = 1.5; // スライドショットの最低速度（更に下げて発動しやすく）
-    const angleThreshold = 3.0; // アングルショットの最低速度（さらに下げる）
+    // テクニック判定の閾値
+    const centerHitThreshold = 0.3; // パドル中心の範囲
+    const slideThreshold = 1.5; // スライドショットの最低速度
+    const angleThreshold = 3.0; // アングルショットの最低速度
 
     let shotType = 'normal';
     let isCritical = false;
     let isSlide = false;
     let isAngle = false;
 
-    // 1. クリティカルショット判定（パドル中心ヒット）
-    if (Math.abs(normalizedHitX) < centerHitThreshold) {
-        isCritical = true;
-        shotType = 'critical';
-        speedMultiplier *= 1.4; // クリティカル加速
+    // テクニック判定（優先順位を修正：アングル → スライド → クリティカル）
 
-        // キラッとしたエフェクト
-        createCriticalEffect(puck.x, puck.y, isTopPaddle);
+    // 1. アングルショット判定（最高優先度：超高速移動＋端部ヒット）
+    if (Math.abs(paddleVelocity) > angleThreshold && Math.abs(normalizedHitX) > 0.8) {
+        isAngle = true;
+        shotType = 'angle';
+        speedMultiplier *= 0.8; // 制御性重視のため軽い減速
+        angleAdjustment *= 1.8; // より鋭角に
+
+        // アングルショット後の継続的な減速効果を設定
+        puck.angleDecayFactor = 0.995; // 毎フレーム0.5%ずつ減速
+        puck.angleDecayDuration = 120; // 約2秒間（60FPS基準）
+
+        // アングルエフェクト
+        createAngleEffect(puck.x, puck.y, isTopPaddle);
     }
-    // 2. スライドショット判定（高速移動＋端部ヒット）
+    // 2. スライドショット判定（高速移動＋端部ヒット、ただしアングルの条件を満たさない場合）
     else if (Math.abs(paddleVelocity) > slideThreshold && Math.abs(normalizedHitX) > 0.5) {
         isSlide = true;
         shotType = 'slide';
@@ -1843,14 +1896,14 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
         // スライドエフェクト
         createSlideEffect(puck.x, puck.y, isTopPaddle);
     }
-    // 3. アングルショット判定（超高速移動＋端部ヒット）
-    else if (Math.abs(paddleVelocity) > angleThreshold && Math.abs(normalizedHitX) > 0.8) {
-        isAngle = true;
-        shotType = 'angle';
-        angleAdjustment *= 1.8; // より鋭角に
+    // 3. クリティカルショット判定（パドル中心ヒット、他の条件を満たさない場合）
+    else if (Math.abs(normalizedHitX) < centerHitThreshold) {
+        isCritical = true;
+        shotType = 'critical';
+        speedMultiplier *= 1.4; // クリティカル加速
 
-        // アングルエフェクト
-        createAngleEffect(puck.x, puck.y, isTopPaddle);
+        // キラッとしたエフェクト
+        createCriticalEffect(puck.x, puck.y, isTopPaddle);
     }
 
     // 基本的な反射設定
@@ -2031,23 +2084,83 @@ function drawTechniqueIndicators() {
         }
     }
 
-    // プレイヤーのパドル速度を視覚化（高速移動時）
-    if (Math.abs(playerPaddleVelocity) > 2) {
-        const speedText = Math.abs(playerPaddleVelocity) > 4 ? '高速移動中' : '移動中';
-        ctx.globalAlpha = 0.7;
-        ctx.fillStyle = '#4488dd';
-        ctx.font = `${fontSize * 0.8}px Arial`;
+    // プレイヤーのパドル速度を視覚化と数値表示
+    const playerSpeedAbs = Math.abs(playerPaddleVelocity);
+    if (playerSpeedAbs > 1) {
+        let speedText = '';
+        let speedColor = '#4488dd';
+
+        // 速度に応じてテキストと色を変更
+        if (playerSpeedAbs > 3) {
+            speedText = `超高速 ${playerSpeedAbs.toFixed(1)}`;
+            speedColor = '#ff8800'; // アングルショット色
+        } else if (playerSpeedAbs > 1.5) {
+            speedText = `高速 ${playerSpeedAbs.toFixed(1)}`;
+            speedColor = '#00ff88'; // スライドショット色
+        } else {
+            speedText = `移動 ${playerSpeedAbs.toFixed(1)}`;
+        }
+
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = speedColor;
+        ctx.font = `${fontSize * 0.7}px Arial`;
+        ctx.textAlign = 'center';
+
+        // 影
+        ctx.fillStyle = '#000000';
+        ctx.fillText(speedText, playerPaddleX + paddleWidth / 2 + 1, canvas.height - paddleHeight - 9);
+
+        // メインテキスト
+        ctx.fillStyle = speedColor;
         ctx.fillText(speedText, playerPaddleX + paddleWidth / 2, canvas.height - paddleHeight - 10);
     }
 
-    // AIのパドル速度を視覚化（高速移動時）
-    if (Math.abs(aiPaddleVelocity) > 2) {
-        const speedText = Math.abs(aiPaddleVelocity) > 4 ? '高速移動中' : '移動中';
-        ctx.globalAlpha = 0.7;
-        ctx.fillStyle = '#ff6b6b';
-        ctx.font = `${fontSize * 0.8}px Arial`;
+    // AIのパドル速度を視覚化と数値表示
+    const aiSpeedAbs = Math.abs(aiPaddleVelocity);
+    if (aiSpeedAbs > 1) {
+        let speedText = '';
+        let speedColor = '#ff6b6b';
+
+        // 速度に応じてテキストと色を変更
+        if (aiSpeedAbs > 3) {
+            speedText = `超高速 ${aiSpeedAbs.toFixed(1)}`;
+            speedColor = '#ff8800'; // アングルショット色
+        } else if (aiSpeedAbs > 1.5) {
+            speedText = `高速 ${aiSpeedAbs.toFixed(1)}`;
+            speedColor = '#00ff88'; // スライドショット色
+        } else {
+            speedText = `移動 ${aiSpeedAbs.toFixed(1)}`;
+        }
+
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = speedColor;
+        ctx.font = `${fontSize * 0.7}px Arial`;
+        ctx.textAlign = 'center';
+
+        // 影
+        ctx.fillStyle = '#000000';
+        ctx.fillText(speedText, aiPaddleX + paddleWidth / 2 + 1, paddleHeight + 21);
+
+        // メインテキスト
+        ctx.fillStyle = speedColor;
         ctx.fillText(speedText, aiPaddleX + paddleWidth / 2, paddleHeight + 20);
     }
+
+    // 判定条件の説明を画面上部に表示（デバッグ用）
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${fontSize * 0.6}px Arial`;
+    ctx.textAlign = 'left';
+
+    const conditionTexts = [
+        'アングル: 速度3.0+ かつ 端部0.8+',
+        'スライド: 速度1.5+ かつ 端部0.5+',
+        'クリティカル: 中心0.3以内'
+    ];
+
+    conditionTexts.forEach((text, index) => {
+        ctx.fillText(text, 10, 20 + index * 15);
+    });
 
     ctx.restore();
 }
