@@ -270,22 +270,26 @@ resumeButton.addEventListener('click', resumeGame);
 restartButton.addEventListener('click', resetGame);
 playAgainButton.addEventListener('click', resetGame);
 
+// ゲーム開始
 function startGame() {
     currentState = GAME_STATE.PLAYING;
     startScreen.classList.add('hidden');
     resetGame();
 }
 
+// ゲームの一時停止
 function pauseGame() {
     currentState = GAME_STATE.PAUSED;
     pauseScreen.classList.remove('hidden');
 }
 
+// ゲームの再開
 function resumeGame() {
     currentState = GAME_STATE.PLAYING;
     pauseScreen.classList.add('hidden');
 }
 
+// ゲームのリセット
 function resetGame() {
     playerScore = 0;
     aiScore = 0;
@@ -293,12 +297,19 @@ function resetGame() {
     totalAiScore = 0;
     lastMatchPlayerScore = 0;
     lastMatchAiScore = 0;
-    currentState = GAME_STATE.PLAYING;
+    upgradeManager.reset();
+    currentState = GAME_STATE.START; // ここを START に変更
     updateScore();
-    resetPuck(true);
-    startScreen.classList.add('hidden');
+    initializePaddles();
+    initializePuck();
+
+    // 全ての画面を非表示
     pauseScreen.classList.add('hidden');
     gameOverScreen.classList.add('hidden');
+    upgradeScreen.classList.add('hidden');
+
+    // スタート画面を表示
+    startScreen.classList.remove('hidden');
 }
 
 function updateScore() {
@@ -650,7 +661,7 @@ function resetForNextMatch() {
     aiScore = 0;
     currentState = GAME_STATE.PLAYING;
     updateScore();
-    resetPuck(true);
+    initializePuck();
 }
 
 // パックの初期化
@@ -670,7 +681,5 @@ function initializePaddles() {
 
 // 初期化
 resizeCanvas();
-initializePaddles();
-initializePuck();
-resetGame();
+resetGame(); // 最初にresetGameを呼び出してスタート画面を表示
 gameLoop();
