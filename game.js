@@ -679,7 +679,7 @@ function createCriticalEffect(x, y, isTopPaddle) {
 
 // スライドショット用エフェクト（回転の軌跡）
 function createSlideEffect(x, y, isTopPaddle) {
-    const color = isTopPaddle ? '#ff6b6b' : '#4ecdc4';
+    const color = isTopPaddle ? '#ff6b6b' : '#4488dd';
 
     // 回転を表現する螺旋パーティクル
     for (let i = 0; i < 8; i++) {
@@ -703,7 +703,7 @@ function createSlideEffect(x, y, isTopPaddle) {
 
 // アングルショット用エフェクト（鋭い光線）
 function createAngleEffect(x, y, isTopPaddle) {
-    const color = isTopPaddle ? '#ff6b6b' : '#4ecdc4';
+    const color = isTopPaddle ? '#ff6b6b' : '#4488dd';
 
     // 鋭角な光線エフェクト
     for (let i = 0; i < 12; i++) {
@@ -921,8 +921,8 @@ function handleGoal(isAiScore) {
         }
     } else {
         playerScore++;
-        createParticles(puck.x, 0, '#4ecdc4');
-        createFlash('#4ecdc433');
+        createParticles(puck.x, 0, '#4488dd');
+        createFlash('#4488dd33');
     }
 
     updateScore();
@@ -1190,17 +1190,17 @@ function drawPaddles() {
     ctx.save();
 
     // 影（背面）
-    ctx.fillStyle = '#3aa3a3';
+    ctx.fillStyle = '#2260aa';
     ctx.fillRect(playerPaddleX - playerPaddleOffset + 2, canvas.height - paddleDepth + 2, playerEffectivePaddleWidth, paddleDepth);
 
     // 側面
-    ctx.fillStyle = '#3bb4b4';
+    ctx.fillStyle = '#3377bb';
     ctx.fillRect(playerPaddleX - playerPaddleOffset, canvas.height - paddleDepth, playerEffectivePaddleWidth, paddleDepth - paddleHeight);
 
     // 上面（メイン）
-    ctx.fillStyle = '#4ecdc4';
+    ctx.fillStyle = '#4488dd';
     if (Math.abs(playerPaddleVelocity) > 3) { // 高速移動時の発光
-        ctx.shadowColor = '#4ecdc4';
+        ctx.shadowColor = '#4488dd';
         ctx.shadowBlur = 10;
     }
     ctx.fillRect(playerPaddleX - playerPaddleOffset, canvas.height - paddleHeight, playerEffectivePaddleWidth, paddleHeight);
@@ -1208,7 +1208,7 @@ function drawPaddles() {
     // 中央線（クリティカルヒット範囲の視覚化）
     const playerCenterLineWidth = playerEffectivePaddleWidth * 0.4;
     const playerCenterLineOffset = (playerEffectivePaddleWidth - playerCenterLineWidth) / 2;
-    ctx.fillStyle = '#aaffff';
+    ctx.fillStyle = '#aaccff';
     ctx.fillRect(playerPaddleX - playerPaddleOffset + playerCenterLineOffset, canvas.height - paddleHeight + 1, playerCenterLineWidth, 2);
 
     ctx.restore();
@@ -1221,7 +1221,7 @@ function drawPaddles() {
         paddleEffects.forEach(upgrade => {
             if (upgrade.visualEffect && upgrade.visualEffect.afterImage) {
                 ctx.save();
-                ctx.fillStyle = '#4ecdc4';
+                ctx.fillStyle = '#4488dd';
                 ctx.globalAlpha = 0.3;
                 ctx.fillRect(
                     playerPaddleX - playerPaddleOffset - 5,
@@ -1814,7 +1814,7 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
 
     // テクニック判定
     const centerHitThreshold = 0.3; // パドル中心の範囲（さらに拡大）
-    const slideThreshold = 2.0; // スライドショットの最低速度（さらに下げる）
+    const slideThreshold = 1.5; // スライドショットの最低速度（更に下げて発動しやすく）
     const angleThreshold = 3.0; // アングルショットの最低速度（さらに下げる）
 
     let shotType = 'normal';
@@ -1832,13 +1832,13 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
         createCriticalEffect(puck.x, puck.y, isTopPaddle);
     }
     // 2. スライドショット判定（高速移動＋端部ヒット）
-    else if (Math.abs(paddleVelocity) > slideThreshold && Math.abs(normalizedHitX) > 0.6) {
+    else if (Math.abs(paddleVelocity) > slideThreshold && Math.abs(normalizedHitX) > 0.5) {
         isSlide = true;
         shotType = 'slide';
         speedMultiplier *= 0.7; // スロー化
 
-        // 回転を加える
-        puck.spin = paddleVelocity * 0.3 * Math.sign(normalizedHitX);
+        // 回転を加える（より強めに）
+        puck.spin = paddleVelocity * 0.4 * Math.sign(normalizedHitX);
 
         // スライドエフェクト
         createSlideEffect(puck.x, puck.y, isTopPaddle);
@@ -1942,8 +1942,8 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     });
 
     // エフェクトの作成（それぞれの色で）
-    const paddleColor = isTopPaddle ? '#ff6b6b' : '#4ecdc4';
-    const flashColor = isTopPaddle ? '#ff6b6b33' : '#4ecdc433';
+    const paddleColor = isTopPaddle ? '#ff6b6b' : '#4488dd';
+    const flashColor = isTopPaddle ? '#ff6b6b33' : '#4488dd33';
     createParticles(puck.x, puck.y, paddleColor);
     createFlash(flashColor);
 
@@ -2035,7 +2035,7 @@ function drawTechniqueIndicators() {
     if (Math.abs(playerPaddleVelocity) > 2) {
         const speedText = Math.abs(playerPaddleVelocity) > 4 ? '高速移動中' : '移動中';
         ctx.globalAlpha = 0.7;
-        ctx.fillStyle = '#4ecdc4';
+        ctx.fillStyle = '#4488dd';
         ctx.font = `${fontSize * 0.8}px Arial`;
         ctx.fillText(speedText, playerPaddleX + paddleWidth / 2, canvas.height - paddleHeight - 10);
     }
