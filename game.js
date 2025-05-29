@@ -183,6 +183,13 @@ let lastMatchPlayerScore = 0;
 let lastMatchAiScore = 0;
 let aiPaddleX = 0;
 let playerPaddleX = 0;
+
+// パドルの移動速度追跡用
+let lastPlayerPaddleX = 0;
+let lastAiPaddleX = 0;
+let playerPaddleVelocity = 0;
+let aiPaddleVelocity = 0;
+
 let puck = {
     x: 0,
     y: 0,
@@ -191,7 +198,11 @@ let puck = {
     radius: 0,
     activeEffects: new Set(),
     lastHitTime: 0,
-    lastHitUpgrade: null
+    lastHitUpgrade: null,
+    // 回転・テクニック要素
+    spin: 0, // 回転値 (-1 to 1)
+    spinDecay: 0.98, // 回転減衰率
+    lastShotType: 'normal' // 'normal', 'critical', 'slide', 'angle'
 };
 
 // パックの軌跡を保存
@@ -204,10 +215,10 @@ let paddleHeight = 10;
 let puckSize = 15;
 
 // AI設定
-const AI_BASE_SPEED = 8;
-const AI_PREDICTION_ERROR = 10;
-const MAX_PUCK_SPEED = 15;
-const INITIAL_PUCK_SPEED = 7;
+const AI_BASE_SPEED = 6; // 少し遅く
+const AI_PREDICTION_ERROR = 15; // エラーを増加
+const MAX_PUCK_SPEED = 12; // 最大速度を少し下げる
+const INITIAL_PUCK_SPEED = 6; // 初期速度を少し下げる
 
 // AIの特性
 let aiTraits = {
@@ -441,6 +452,9 @@ function updateScore() {
 function moveAI() {
     if (currentState !== GAME_STATE.PLAYING) return;
 
+    // 前フレームの位置を保存
+    lastAiPaddleX = aiPaddleX;
+
     let targetX = canvas.width / 2;
     const baseSpeed = AI_BASE_SPEED * aiTraits.speed;
     let speedMultiplier = 1.0;
@@ -499,11 +513,17 @@ function moveAI() {
 
     // パドルの位置を制限
     aiPaddleX = Math.max(0, Math.min(canvas.width - paddleWidth, aiPaddleX));
+
+    // AI速度を計算（テクニック検出用）
+    aiPaddleVelocity = aiPaddleX - lastAiPaddleX;
 }
 
 // プレイヤーパドルの移動
 function movePlayer() {
     if (currentState !== GAME_STATE.PLAYING) return;
+
+    // 前フレームの位置を保存
+    lastPlayerPaddleX = playerPaddleX;
 
     // 速度の計算
     const baseSpeed = canvas.width * 0.02;
@@ -536,6 +556,9 @@ function movePlayer() {
 
     // パドルの位置を制限
     playerPaddleX = Math.max(0, Math.min(canvas.width - paddleWidth, playerPaddleX));
+
+    // パドル速度を計算（テクニック検出用）
+    playerPaddleVelocity = playerPaddleX - lastPlayerPaddleX;
 }
 
 // マグネット効果の適用
@@ -581,6 +604,114 @@ function createParticles(x, y, color) {
 function createFlash(color) {
     flashAlpha = 1;
     flashColor = color;
+}
+
+// クリティカルショット用エフェクト（キラッ）
+function createCriticalEffect(x, y, isTopPaddle) {
+    // 強い光のフラッシュ
+    createFlash('#ffffff88');
+
+    // 特別な星型パーティクル
+    for (let i = 0; i < 15; i++) {
+        const angle = (i / 15) * Math.PI * 2;
+        const speed = 8 + Math.random() * 4;
+        const particle = new Particle(x, y, '#ffff00');
+        particle.dx = Math.cos(angle) * speed;
+        particle.dy = Math.sin(angle) * speed;
+        particle.size = 3 + Math.random() * 2;
+        particle.lifetime = 20;
+        particles.push(particle);
+    }
+
+    // 音効果的な視覚表現（短い光の輪）
+    if (effectSystem) {
+        try {
+            effectSystem.createRingEffect(x, y, {
+                color: '#ffff00',
+                maxRadius: 30,
+                duration: 300,
+                thickness: 3
+            });
+        } catch (e) {
+            console.warn('Ring effect not available:', e);
+        }
+    }
+}
+
+// スライドショット用エフェクト（回転の軌跡）
+function createSlideEffect(x, y, isTopPaddle) {
+    const color = isTopPaddle ? '#ff6b6b' : '#4ecdc4';
+
+    // 回転を表現する螺旋パーティクル
+    for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        const radius = 15 + i * 2;
+        const particle = new Particle(
+            x + Math.cos(angle) * radius,
+            y + Math.sin(angle) * radius,
+            color
+        );
+        particle.dx = Math.cos(angle + Math.PI / 2) * 3;
+        particle.dy = Math.sin(angle + Math.PI / 2) * 3;
+        particle.size = 2;
+        particle.lifetime = 25;
+        particles.push(particle);
+    }
+
+    // 弱いフラッシュ
+    createFlash(color + '44');
+}
+
+// アングルショット用エフェクト（鋭い光線）
+function createAngleEffect(x, y, isTopPaddle) {
+    const color = isTopPaddle ? '#ff6b6b' : '#4ecdc4';
+
+    // 鋭角な光線エフェクト
+    for (let i = 0; i < 12; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 12 + Math.random() * 8;
+        const particle = new Particle(x, y, color);
+        particle.dx = Math.cos(angle) * speed;
+        particle.dy = Math.sin(angle) * speed;
+        particle.size = 1.5;
+        particle.lifetime = 15;
+        particles.push(particle);
+    }
+
+    // 強めのフラッシュ
+    createFlash(color + '66');
+
+    // 十字形の光線
+    const directions = [{
+            dx: 1,
+            dy: 0
+        }, {
+            dx: -1,
+            dy: 0
+        },
+        {
+            dx: 0,
+            dy: 1
+        }, {
+            dx: 0,
+            dy: -1
+        }
+    ];
+
+    directions.forEach(dir => {
+        for (let i = 1; i <= 5; i++) {
+            const particle = new Particle(
+                x + dir.dx * i * 8,
+                y + dir.dy * i * 8,
+                '#ffffff'
+            );
+            particle.dx = dir.dx * 2;
+            particle.dy = dir.dy * 2;
+            particle.size = 3 - i * 0.4;
+            particle.lifetime = 20 - i * 2;
+            particles.push(particle);
+        }
+    });
 }
 
 // パドルとの衝突判定と処理
@@ -632,139 +763,6 @@ function handlePaddleCollisions() {
     }
 }
 
-// パドルとの衝突時の処理
-function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWidth) {
-    const paddleCenterX = paddleX + effectivePaddleWidth / 2;
-    const hitX = puck.x - paddleCenterX;
-    const normalizedHitX = hitX / (effectivePaddleWidth / 2);
-
-    // エラーチェック
-    if (!upgradeManager || !aiUpgradeManager) {
-        console.warn('Upgrade managers not initialized in paddle collision');
-        // 基本的な反射のみ行う
-        puck.dy = -puck.dy;
-        return;
-    }
-
-    // AIまたはプレイヤーのアップグレード効果を取得
-    const activeEffects = isTopPaddle ? aiUpgradeManager.upgradeInstances : upgradeManager.upgradeInstances;
-    const currentManager = isTopPaddle ? aiUpgradeManager : upgradeManager;
-
-    let baseSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
-    let speedMultiplier = 1.0;
-    let knockbackPower = 1.0;
-    let angleAdjustment = 1.0;
-
-    // 基本的な反射設定
-    const baseSpeedBoost = isTopPaddle ? 1.05 : 1.1;
-    const maxSpeedRatio = isTopPaddle ? 0.8 : 1.0;
-    const angleRange = isTopPaddle ? Math.PI / 4 : Math.PI / 3;
-
-    // 百錬自得カウンターの発動チェック
-    const perfectCounters = activeEffects.filter(u => u.id === 'hundredReflexCounter');
-    perfectCounters.forEach(perfectCounter => {
-        const targetY = isTopPaddle ? paddleHeight : (canvas.height - paddleHeight);
-        const timingSweetSpot = Math.abs(puck.y - targetY) < perfectCounter.effect.perfectTimingWindow;
-        if (timingSweetSpot) {
-            speedMultiplier *= perfectCounter.effect.speedBoostMultiplier;
-            angleAdjustment *= perfectCounter.effect.angleAdjustment;
-            if (effectSystem) {
-                effectSystem.createAuraEffect(puck.x, puck.y, perfectCounter.visualEffect);
-            }
-            puck.lastHitUpgrade = perfectCounter;
-        }
-    });
-
-    // 重波動ショットの効果（重複可能）
-    const heavyWaves = activeEffects.filter(u => u.id === 'heavyWave');
-    heavyWaves.forEach(heavyWave => {
-        speedMultiplier *= heavyWave.effect.puckSpeedMultiplier;
-        knockbackPower *= heavyWave.effect.knockbackPower;
-        if (effectSystem) {
-            effectSystem.createAuraEffect(puck.x, puck.y, heavyWave.visualEffect);
-        }
-        puck.lastHitUpgrade = heavyWave;
-
-        // コントロール低下効果を相手に適用
-        const targetManager = isTopPaddle ? upgradeManager : aiUpgradeManager;
-        targetManager.addTemporaryEffect('controlReduction', {
-            factor: heavyWave.effect.controlReduction
-        }, heavyWave.effect.controlReductionDuration);
-    });
-
-    // 基本的な跳ね返り計算
-    const newSpeed = Math.min(baseSpeed * baseSpeedBoost * speedMultiplier, MAX_PUCK_SPEED * maxSpeedRatio);
-    const angle = normalizedHitX * angleRange * angleAdjustment;
-
-    puck.dx = Math.sin(angle) * newSpeed;
-    puck.dy = (isTopPaddle ? 1 : -1) * Math.cos(angle) * newSpeed;
-    puck.y = isTopPaddle ? (paddleY + paddleHeight + puck.radius) : (paddleY - puck.radius);
-
-    // ステルス・スネイクの効果（重複可能）
-    const stealthSnakes = activeEffects.filter(u => u.id === 'stealthSnake');
-    stealthSnakes.forEach(stealthSnake => {
-        puck.activeEffects.add('stealth');
-        setTimeout(() => {
-            puck.activeEffects.delete('stealth');
-        }, stealthSnake.effect.fadeOutDuration);
-        puck.lastHitUpgrade = stealthSnake;
-    });
-
-    // 氷結フィールドショットの効果（重複可能）
-    const iceFields = activeEffects.filter(u => u.id === 'iceFieldShot');
-    iceFields.forEach(iceField => {
-        puck.activeEffects.add('ice');
-        puck.lastHitUpgrade = iceField;
-    });
-
-    // 破滅への誘引の効果（重複可能）
-    const dooms = activeEffects.filter(u => u.id === 'doomInducement');
-    dooms.forEach(doom => {
-        puck.activeEffects.add('doom');
-        puck.lastHitUpgrade = doom;
-    });
-
-    // エフェクトの作成（それぞれの色で）
-    const paddleColor = isTopPaddle ? '#ff6b6b' : '#4ecdc4';
-    const flashColor = isTopPaddle ? '#ff6b6b33' : '#4ecdc433';
-    createParticles(puck.x, puck.y, paddleColor);
-    createFlash(flashColor);
-
-    // ノックバック効果の適用（相手に）
-    if (knockbackPower > 1 && heavyWaves.length > 0) {
-        const targetManager = isTopPaddle ? upgradeManager : aiUpgradeManager;
-        targetManager.addTemporaryEffect('knockback', {
-            factor: knockbackPower
-        }, heavyWaves[0].effect.controlReductionDuration);
-    }
-
-    // パックの速度を制限
-    limitPuckSpeed();
-
-    // アップグレードエフェクトの適用
-    if (puck.lastHitUpgrade && effectSystem) {
-        // ビジュアルエフェクトの作成
-        if (puck.lastHitUpgrade.visualEffect && typeof EFFECT_TYPES !== 'undefined') {
-            const effectX = puck.x;
-            const effectY = puck.y;
-
-            switch (puck.lastHitUpgrade.visualEffect.type) {
-                case EFFECT_TYPES.AURA:
-                    effectSystem.createAuraEffect(effectX, effectY, puck.lastHitUpgrade.visualEffect);
-                    break;
-                case EFFECT_TYPES.TRAIL:
-                    if (puckTrail.length > 1) {
-                        effectSystem.createTrailEffect(puckTrail, puck.lastHitUpgrade.visualEffect);
-                    }
-                    break;
-                case EFFECT_TYPES.IMPACT:
-                    effectSystem.createParticles(effectX, effectY, puck.lastHitUpgrade.visualEffect);
-                    break;
-            }
-        }
-    }
-}
-
 // パックの移動と衝突判定
 function movePuck() {
     if (currentState !== GAME_STATE.PLAYING) return;
@@ -780,6 +778,15 @@ function movePuck() {
             puck.dx += Math.sin(time * stealthUpgrade.effect.sineFrequency) *
                 stealthUpgrade.effect.sineMagnitude / 100;
         }
+    }
+
+    // 回転による軌道変化（スライドショット効果）
+    if (Math.abs(puck.spin) > 0.1) {
+        const spinForce = puck.spin * 0.3; // 回転の強さを調整
+        puck.dx += spinForce * Math.sign(puck.dy); // 回転方向によって横に曲がる
+
+        // 回転減衰
+        puck.spin *= puck.spinDecay;
     }
 
     // パックの移動
@@ -804,10 +811,14 @@ function movePuck() {
     if (puck.x - puck.radius < 0) {
         puck.x = puck.radius;
         puck.dx = Math.abs(puck.dx);
+        // 壁との衝突で回転も反転
+        puck.spin *= -0.7;
         handleWallCollision(0, puck.y);
     } else if (puck.x + puck.radius > canvas.width) {
         puck.x = canvas.width - puck.radius;
         puck.dx = -Math.abs(puck.dx);
+        // 壁との衝突で回転も反転
+        puck.spin *= -0.7;
         handleWallCollision(canvas.width, puck.y);
     }
 
@@ -886,6 +897,8 @@ function resetPuck(aiServe) {
     puck.activeEffects.clear();
     puck.lastHitTime = 0;
     puck.lastHitUpgrade = null;
+    puck.spin = 0; // 回転を初期化
+    puck.lastShotType = 'normal'; // ショットタイプを初期化
     puckTrail = [];
 }
 
@@ -1029,17 +1042,65 @@ function drawPaddles() {
     const aiEffectivePaddleWidth = paddleWidth * aiPaddleWidthMultiplier;
     const aiPaddleOffset = (aiEffectivePaddleWidth - paddleWidth) / 2;
 
-    // AIのパドル
-    ctx.fillStyle = '#ff6b6b';
+    // パドルの高さ（3D効果用）
+    const paddleDepth = paddleHeight * 1.5;
+
+    // AIのパドル（3D風描画）
+    ctx.save();
+
+    // 影（背面）
+    ctx.fillStyle = '#cc5555';
     if (aiUpgradeManager && aiUpgradeManager.hasTemporaryEffect('nullification')) {
-        ctx.globalAlpha = 0.5;
+        ctx.globalAlpha = 0.3;
+    }
+    ctx.fillRect(aiPaddleX - aiPaddleOffset + 2, 2, aiEffectivePaddleWidth, paddleDepth);
+
+    // 側面
+    ctx.fillStyle = '#dd5555';
+    ctx.fillRect(aiPaddleX - aiPaddleOffset, paddleHeight, aiEffectivePaddleWidth, paddleDepth - paddleHeight);
+
+    // 上面（メイン）
+    ctx.fillStyle = '#ff6b6b';
+    if (Math.abs(aiPaddleVelocity) > 3) { // 高速移動時の発光
+        ctx.shadowColor = '#ff6b6b';
+        ctx.shadowBlur = 10;
     }
     ctx.fillRect(aiPaddleX - aiPaddleOffset, 0, aiEffectivePaddleWidth, paddleHeight);
-    ctx.globalAlpha = 1.0;
 
-    // プレイヤーのパドル
+    // 中央線（クリティカルヒット範囲の視覚化）
+    const centerLineWidth = aiEffectivePaddleWidth * 0.4;
+    const centerLineOffset = (aiEffectivePaddleWidth - centerLineWidth) / 2;
+    ctx.fillStyle = '#ffaaaa';
+    ctx.fillRect(aiPaddleX - aiPaddleOffset + centerLineOffset, 1, centerLineWidth, 2);
+
+    ctx.restore();
+
+    // プレイヤーのパドル（3D風描画）
+    ctx.save();
+
+    // 影（背面）
+    ctx.fillStyle = '#3aa3a3';
+    ctx.fillRect(playerPaddleX - playerPaddleOffset + 2, canvas.height - paddleDepth + 2, playerEffectivePaddleWidth, paddleDepth);
+
+    // 側面
+    ctx.fillStyle = '#3bb4b4';
+    ctx.fillRect(playerPaddleX - playerPaddleOffset, canvas.height - paddleDepth, playerEffectivePaddleWidth, paddleDepth - paddleHeight);
+
+    // 上面（メイン）
     ctx.fillStyle = '#4ecdc4';
+    if (Math.abs(playerPaddleVelocity) > 3) { // 高速移動時の発光
+        ctx.shadowColor = '#4ecdc4';
+        ctx.shadowBlur = 10;
+    }
     ctx.fillRect(playerPaddleX - playerPaddleOffset, canvas.height - paddleHeight, playerEffectivePaddleWidth, paddleHeight);
+
+    // 中央線（クリティカルヒット範囲の視覚化）
+    const playerCenterLineWidth = playerEffectivePaddleWidth * 0.4;
+    const playerCenterLineOffset = (playerEffectivePaddleWidth - playerCenterLineWidth) / 2;
+    ctx.fillStyle = '#aaffff';
+    ctx.fillRect(playerPaddleX - playerPaddleOffset + playerCenterLineOffset, canvas.height - paddleHeight + 1, playerCenterLineWidth, 2);
+
+    ctx.restore();
 
     // パドルのエフェクト（重複対応）
     if (upgradeManager && typeof EFFECT_TYPES !== 'undefined') {
@@ -1082,6 +1143,9 @@ function drawPaddles() {
             }
         });
     }
+
+    // テクニック表示
+    drawTechniqueIndicators();
 }
 
 // ゲームループ
@@ -1253,6 +1317,8 @@ function initializePuck() {
     puck.activeEffects.clear();
     puck.lastHitTime = 0;
     puck.lastHitUpgrade = null;
+    puck.spin = 0; // 回転を初期化
+    puck.lastShotType = 'normal'; // ショットタイプを初期化
     puckTrail = [];
 }
 
@@ -1604,4 +1670,253 @@ if (isMobile) {
 } else {
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
+}
+
+// パドルとの衝突時の処理
+function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWidth) {
+    const paddleCenterX = paddleX + effectivePaddleWidth / 2;
+    const hitX = puck.x - paddleCenterX;
+    const normalizedHitX = hitX / (effectivePaddleWidth / 2);
+
+    // エラーチェック
+    if (!upgradeManager || !aiUpgradeManager) {
+        console.warn('Upgrade managers not initialized in paddle collision');
+        // 基本的な反射のみ行う
+        puck.dy = -puck.dy;
+        return;
+    }
+
+    // AIまたはプレイヤーのアップグレード効果を取得
+    const activeEffects = isTopPaddle ? aiUpgradeManager.upgradeInstances : upgradeManager.upgradeInstances;
+    const currentManager = isTopPaddle ? aiUpgradeManager : upgradeManager;
+    const paddleVelocity = isTopPaddle ? aiPaddleVelocity : playerPaddleVelocity;
+
+    let baseSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
+    let speedMultiplier = 1.0;
+    let knockbackPower = 1.0;
+    let angleAdjustment = 1.0;
+
+    // テクニック判定
+    const centerHitThreshold = 0.25; // パドル中心の範囲（少し拡大）
+    const slideThreshold = 2.5; // スライドショットの最低速度（少し下げる）
+    const angleThreshold = 3.5; // アングルショットの最低速度（少し下げる）
+
+    let shotType = 'normal';
+    let isCritical = false;
+    let isSlide = false;
+    let isAngle = false;
+
+    // 1. クリティカルショット判定（パドル中心ヒット）
+    if (Math.abs(normalizedHitX) < centerHitThreshold) {
+        isCritical = true;
+        shotType = 'critical';
+        speedMultiplier *= 1.4; // クリティカル加速
+
+        // キラッとしたエフェクト
+        createCriticalEffect(puck.x, puck.y, isTopPaddle);
+    }
+    // 2. スライドショット判定（高速移動＋端部ヒット）
+    else if (Math.abs(paddleVelocity) > slideThreshold && Math.abs(normalizedHitX) > 0.6) {
+        isSlide = true;
+        shotType = 'slide';
+        speedMultiplier *= 0.7; // スロー化
+
+        // 回転を加える
+        puck.spin = paddleVelocity * 0.3 * Math.sign(normalizedHitX);
+
+        // スライドエフェクト
+        createSlideEffect(puck.x, puck.y, isTopPaddle);
+    }
+    // 3. アングルショット判定（超高速移動＋端部ヒット）
+    else if (Math.abs(paddleVelocity) > angleThreshold && Math.abs(normalizedHitX) > 0.8) {
+        isAngle = true;
+        shotType = 'angle';
+        angleAdjustment *= 1.8; // より鋭角に
+
+        // アングルエフェクト
+        createAngleEffect(puck.x, puck.y, isTopPaddle);
+    }
+
+    // 基本的な反射設定
+    const baseSpeedBoost = isTopPaddle ? 1.05 : 1.1;
+    const maxSpeedRatio = isTopPaddle ? 0.8 : 1.0;
+    const angleRange = isTopPaddle ? Math.PI / 4 : Math.PI / 3;
+
+    // 百錬自得カウンターの発動チェック
+    const perfectCounters = activeEffects.filter(u => u.id === 'hundredReflexCounter');
+    perfectCounters.forEach(perfectCounter => {
+        const targetY = isTopPaddle ? paddleHeight : (canvas.height - paddleHeight);
+        const timingSweetSpot = Math.abs(puck.y - targetY) < perfectCounter.effect.perfectTimingWindow;
+        if (timingSweetSpot) {
+            speedMultiplier *= perfectCounter.effect.speedBoostMultiplier;
+            angleAdjustment *= perfectCounter.effect.angleAdjustment;
+            if (effectSystem) {
+                effectSystem.createAuraEffect(puck.x, puck.y, perfectCounter.visualEffect);
+            }
+            puck.lastHitUpgrade = perfectCounter;
+        }
+    });
+
+    // 重波動ショットの効果（重複可能）
+    const heavyWaves = activeEffects.filter(u => u.id === 'heavyWave');
+    heavyWaves.forEach(heavyWave => {
+        speedMultiplier *= heavyWave.effect.puckSpeedMultiplier;
+        knockbackPower *= heavyWave.effect.knockbackPower;
+        if (effectSystem) {
+            effectSystem.createAuraEffect(puck.x, puck.y, heavyWave.visualEffect);
+        }
+        puck.lastHitUpgrade = heavyWave;
+
+        // コントロール低下効果を相手に適用
+        const targetManager = isTopPaddle ? upgradeManager : aiUpgradeManager;
+        targetManager.addTemporaryEffect('controlReduction', {
+            factor: heavyWave.effect.controlReduction
+        }, heavyWave.effect.controlReductionDuration);
+    });
+
+    // 基本的な跳ね返り計算
+    const newSpeed = Math.min(baseSpeed * baseSpeedBoost * speedMultiplier, MAX_PUCK_SPEED * maxSpeedRatio);
+    const angle = normalizedHitX * angleRange * angleAdjustment;
+
+    puck.dx = Math.sin(angle) * newSpeed;
+    puck.dy = (isTopPaddle ? 1 : -1) * Math.cos(angle) * newSpeed;
+    puck.y = isTopPaddle ? (paddleY + paddleHeight + puck.radius) : (paddleY - puck.radius);
+
+    // ショットタイプを記録
+    puck.lastShotType = shotType;
+    puck.lastHitTime = Date.now(); // ヒット時刻を記録
+
+    // ステルス・スネイクの効果（重複可能）
+    const stealthSnakes = activeEffects.filter(u => u.id === 'stealthSnake');
+    stealthSnakes.forEach(stealthSnake => {
+        puck.activeEffects.add('stealth');
+        setTimeout(() => {
+            puck.activeEffects.delete('stealth');
+        }, stealthSnake.effect.fadeOutDuration);
+        puck.lastHitUpgrade = stealthSnake;
+    });
+
+    // 氷結フィールドショットの効果（重複可能）
+    const iceFields = activeEffects.filter(u => u.id === 'iceFieldShot');
+    iceFields.forEach(iceField => {
+        puck.activeEffects.add('ice');
+        puck.lastHitUpgrade = iceField;
+    });
+
+    // 破滅への誘引の効果（重複可能）
+    const dooms = activeEffects.filter(u => u.id === 'doomInducement');
+    dooms.forEach(doom => {
+        puck.activeEffects.add('doom');
+        puck.lastHitUpgrade = doom;
+    });
+
+    // エフェクトの作成（それぞれの色で）
+    const paddleColor = isTopPaddle ? '#ff6b6b' : '#4ecdc4';
+    const flashColor = isTopPaddle ? '#ff6b6b33' : '#4ecdc433';
+    createParticles(puck.x, puck.y, paddleColor);
+    createFlash(flashColor);
+
+    // ノックバック効果の適用（相手に）
+    if (knockbackPower > 1 && heavyWaves.length > 0) {
+        const targetManager = isTopPaddle ? upgradeManager : aiUpgradeManager;
+        targetManager.addTemporaryEffect('knockback', {
+            factor: knockbackPower
+        }, heavyWaves[0].effect.controlReductionDuration);
+    }
+
+    // パックの速度を制限
+    limitPuckSpeed();
+
+    // アップグレードエフェクトの適用
+    if (puck.lastHitUpgrade && effectSystem) {
+        // ビジュアルエフェクトの作成
+        if (puck.lastHitUpgrade.visualEffect && typeof EFFECT_TYPES !== 'undefined') {
+            const effectX = puck.x;
+            const effectY = puck.y;
+
+            switch (puck.lastHitUpgrade.visualEffect.type) {
+                case EFFECT_TYPES.AURA:
+                    effectSystem.createAuraEffect(effectX, effectY, puck.lastHitUpgrade.visualEffect);
+                    break;
+                case EFFECT_TYPES.TRAIL:
+                    if (puckTrail.length > 1) {
+                        effectSystem.createTrailEffect(puckTrail, puck.lastHitUpgrade.visualEffect);
+                    }
+                    break;
+                case EFFECT_TYPES.IMPACT:
+                    effectSystem.createParticles(effectX, effectY, puck.lastHitUpgrade.visualEffect);
+                    break;
+            }
+        }
+    }
+}
+
+// テクニック表示機能
+function drawTechniqueIndicators() {
+    ctx.save();
+
+    // フォントサイズを調整
+    const fontSize = Math.max(12, canvas.width * 0.02);
+    ctx.font = `${fontSize}px Arial`;
+    ctx.textAlign = 'center';
+
+    // 最後のショットタイプを表示（少し透明度を持たせてフェードアウト）
+    if (puck.lastShotType && puck.lastShotType !== 'normal') {
+        let alpha = 1.0;
+        const timeSinceShot = Date.now() - (puck.lastHitTime || 0);
+        if (timeSinceShot > 1000) {
+            alpha = Math.max(0, 1 - (timeSinceShot - 1000) / 2000);
+        }
+
+        if (alpha > 0) {
+            ctx.globalAlpha = alpha;
+            let displayText = '';
+            let displayColor = '';
+
+            switch (puck.lastShotType) {
+                case 'critical':
+                    displayText = 'CRITICAL HIT!';
+                    displayColor = '#ffff00';
+                    break;
+                case 'slide':
+                    displayText = 'SLIDE SHOT';
+                    displayColor = '#00ff88';
+                    break;
+                case 'angle':
+                    displayText = 'ANGLE SHOT';
+                    displayColor = '#ff8800';
+                    break;
+            }
+
+            if (displayText) {
+                // 影
+                ctx.fillStyle = '#000000';
+                ctx.fillText(displayText, canvas.width / 2 + 2, canvas.height / 2 + 2);
+
+                // メインテキスト
+                ctx.fillStyle = displayColor;
+                ctx.fillText(displayText, canvas.width / 2, canvas.height / 2);
+            }
+        }
+    }
+
+    // プレイヤーのパドル速度を視覚化（高速移動時）
+    if (Math.abs(playerPaddleVelocity) > 2) {
+        const speedText = Math.abs(playerPaddleVelocity) > 4 ? '高速移動中' : '移動中';
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = '#4ecdc4';
+        ctx.font = `${fontSize * 0.8}px Arial`;
+        ctx.fillText(speedText, playerPaddleX + paddleWidth / 2, canvas.height - paddleHeight - 10);
+    }
+
+    // AIのパドル速度を視覚化（高速移動時）
+    if (Math.abs(aiPaddleVelocity) > 2) {
+        const speedText = Math.abs(aiPaddleVelocity) > 4 ? '高速移動中' : '移動中';
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = '#ff6b6b';
+        ctx.font = `${fontSize * 0.8}px Arial`;
+        ctx.fillText(speedText, aiPaddleX + paddleWidth / 2, paddleHeight + 20);
+    }
+
+    ctx.restore();
 }
