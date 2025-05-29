@@ -202,7 +202,13 @@ let puck = {
     // 回転・テクニック要素
     spin: 0, // 回転値 (-1 to 1)
     spinDecay: 0.98, // 回転減衰率
-    lastShotType: 'normal' // 'normal', 'critical', 'slide', 'angle'
+    lastShotType: 'normal', // 'normal', 'critical', 'slide', 'angle'
+    // イージング用変数
+    targetDx: 0, // 目標速度X
+    targetDy: 0, // 目標速度Y
+    lastX: 0, // 前フレームの位置X
+    lastY: 0, // 前フレームの位置Y
+    smoothingFactor: 0.12 // イージング強度（0.1-0.3）調整でより滑らか
 };
 
 // パックの軌跡を保存
@@ -593,6 +599,34 @@ function limitPuckSpeed() {
     }
 }
 
+// パックの速度にイージングを適用
+function applyPuckEasing() {
+    // 現在速度と目標速度の差を計算
+    const speedDiffX = puck.targetDx - puck.dx;
+    const speedDiffY = puck.targetDy - puck.dy;
+
+    // 高速時はより強いイージングを適用
+    const currentSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
+    const speedRatio = Math.min(currentSpeed / MAX_PUCK_SPEED, 1.0);
+    const dynamicSmoothing = puck.smoothingFactor * (1 + speedRatio * 0.5);
+
+    // イージングを適用（目標速度に向かって徐々に変化）
+    puck.dx += speedDiffX * dynamicSmoothing;
+    puck.dy += speedDiffY * dynamicSmoothing;
+
+    // 急激な速度変化を制限
+    const maxSpeedChange = 0.6; // 1フレームあたりの最大速度変化（より滑らかに）
+    const actualChangeX = puck.dx - (puck.lastX !== undefined ? (puck.x - puck.lastX) : 0);
+    const actualChangeY = puck.dy - (puck.lastY !== undefined ? (puck.y - puck.lastY) : 0);
+
+    if (Math.abs(actualChangeX) > maxSpeedChange) {
+        puck.dx = (puck.lastX !== undefined ? (puck.x - puck.lastX) : 0) + Math.sign(actualChangeX) * maxSpeedChange;
+    }
+    if (Math.abs(actualChangeY) > maxSpeedChange) {
+        puck.dy = (puck.lastY !== undefined ? (puck.y - puck.lastY) : 0) + Math.sign(actualChangeY) * maxSpeedChange;
+    }
+}
+
 // パーティクルエフェクトの作成
 function createParticles(x, y, color) {
     for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -770,12 +804,16 @@ function movePuck() {
     // 速度の検証
     if (!validatePuckSpeed()) return;
 
+    // 前フレームの位置を保存
+    puck.lastX = puck.x;
+    puck.lastY = puck.y;
+
     // ステルス・スネイクの効果による蛇行
     if (puck.activeEffects.has('stealth') && upgradeManager) {
         const stealthUpgrade = upgradeManager.upgradeInstances.find(u => u.id === 'stealthSnake');
         if (stealthUpgrade) {
             const time = Date.now() / 1000;
-            puck.dx += Math.sin(time * stealthUpgrade.effect.sineFrequency) *
+            puck.targetDx += Math.sin(time * stealthUpgrade.effect.sineFrequency) *
                 stealthUpgrade.effect.sineMagnitude / 100;
         }
     }
@@ -783,11 +821,14 @@ function movePuck() {
     // 回転による軌道変化（スライドショット効果）
     if (Math.abs(puck.spin) > 0.1) {
         const spinForce = puck.spin * 0.3; // 回転の強さを調整
-        puck.dx += spinForce * Math.sign(puck.dy); // 回転方向によって横に曲がる
+        puck.targetDx += spinForce * Math.sign(puck.dy); // 回転方向によって横に曲がる
 
         // 回転減衰
         puck.spin *= puck.spinDecay;
     }
+
+    // イージングを適用
+    applyPuckEasing();
 
     // パックの移動
     puck.x += puck.dx;
@@ -811,12 +852,14 @@ function movePuck() {
     if (puck.x - puck.radius < 0) {
         puck.x = puck.radius;
         puck.dx = Math.abs(puck.dx);
+        puck.targetDx = Math.abs(puck.targetDx);
         // 壁との衝突で回転も反転
         puck.spin *= -0.7;
         handleWallCollision(0, puck.y);
     } else if (puck.x + puck.radius > canvas.width) {
         puck.x = canvas.width - puck.radius;
         puck.dx = -Math.abs(puck.dx);
+        puck.targetDx = -Math.abs(puck.targetDx);
         // 壁との衝突で回転も反転
         puck.spin *= -0.7;
         handleWallCollision(canvas.width, puck.y);
@@ -893,12 +936,18 @@ function resetPuck(aiServe) {
     puck.dx = GOAL_RESET_SPEED * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1) * 0.7; // 水平速度を30%減
     puck.dy = GOAL_RESET_SPEED * Math.cos(angle) * (aiServe ? 1 : -1); // 垂直方向は維持
 
+    // 目標速度も同期
+    puck.targetDx = puck.dx;
+    puck.targetDy = puck.dy;
+    puck.lastX = puck.x;
+    puck.lastY = puck.y;
+
     // エフェクトをクリア
     puck.activeEffects.clear();
     puck.lastHitTime = 0;
     puck.lastHitUpgrade = null;
-    puck.spin = 0; // 回転を初期化
-    puck.lastShotType = 'normal'; // ショットタイプを初期化
+    puck.spin = 0; // 回転もリセット
+    puck.lastShotType = 'normal'; // ショットタイプもリセット
     puckTrail = [];
 }
 
@@ -969,11 +1018,61 @@ function drawPuck() {
         ctx.globalAlpha = 0.3;
     }
 
+    // パックの速度に基づくモーションブラー効果
+    const currentSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
+    const speedRatio = Math.min(currentSpeed / MAX_PUCK_SPEED, 1.0);
+
+    if (speedRatio > 0.5) {
+        // 高速時のモーションブラー
+        const blurIntensity = (speedRatio - 0.5) * 2; // 0-1の範囲
+        const blurLength = blurIntensity * 20; // ブラーの長さ
+
+        // 移動方向の逆にブラー軌跡を描画
+        const angle = Math.atan2(puck.dy, puck.dx);
+        const trailSteps = Math.floor(blurLength / 3);
+
+        for (let i = 1; i <= trailSteps; i++) {
+            const trailAlpha = 0.3 * (1 - i / trailSteps) * blurIntensity;
+            const trailX = puck.x - Math.cos(angle) * i * 3;
+            const trailY = puck.y - Math.sin(angle) * i * 3;
+            const trailSize = puck.radius * (1 - i / trailSteps * 0.3);
+
+            ctx.save();
+            ctx.globalAlpha = trailAlpha;
+            ctx.beginPath();
+            ctx.arc(trailX, trailY, trailSize, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // 高速時の発光効果
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 15 * blurIntensity;
+    }
+
     // 基本的なパックの描画
     ctx.beginPath();
     ctx.arc(puck.x, puck.y, puck.radius, 0, Math.PI * 2);
     ctx.fillStyle = '#fff';
     ctx.fill();
+
+    // 回転の可視化（スライドショット時）
+    if (Math.abs(puck.spin) > 0.1) {
+        const spinRadius = puck.radius * 0.6;
+        const spinAngle = Date.now() * 0.01 * puck.spin;
+
+        ctx.save();
+        ctx.translate(puck.x, puck.y);
+        ctx.rotate(spinAngle);
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-spinRadius, 0);
+        ctx.lineTo(spinRadius, 0);
+        ctx.stroke();
+        ctx.restore();
+    }
 
     // アクティブなアップグレードに基づくエフェクトの描画
     if (puck.lastHitUpgrade && puck.lastHitUpgrade.visualEffect && typeof EFFECT_TYPES !== 'undefined') {
@@ -1313,6 +1412,11 @@ function initializePuck() {
     const slowInitialSpeed = INITIAL_PUCK_SPEED * 0.8; // 初期速度を20%減
     puck.dx = slowInitialSpeed * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
     puck.dy = slowInitialSpeed * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1);
+    // 目標速度も初期化
+    puck.targetDx = puck.dx;
+    puck.targetDy = puck.dy;
+    puck.lastX = puck.x;
+    puck.lastY = puck.y;
     puck.radius = puckSize / 2;
     puck.activeEffects.clear();
     puck.lastHitTime = 0;
@@ -1778,8 +1882,17 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     const newSpeed = Math.min(baseSpeed * baseSpeedBoost * speedMultiplier, MAX_PUCK_SPEED * maxSpeedRatio);
     const angle = normalizedHitX * angleRange * angleAdjustment;
 
-    puck.dx = Math.sin(angle) * newSpeed;
-    puck.dy = (isTopPaddle ? 1 : -1) * Math.cos(angle) * newSpeed;
+    // 目標速度を設定（直接変更ではなく）
+    puck.targetDx = Math.sin(angle) * newSpeed;
+    puck.targetDy = (isTopPaddle ? 1 : -1) * Math.cos(angle) * newSpeed;
+
+    // 即座に反映する必要がある場合のみ直接設定
+    const immediateReflection = isCritical || Math.abs(speedMultiplier - 1.0) > 0.5;
+    if (immediateReflection) {
+        puck.dx = puck.targetDx;
+        puck.dy = puck.targetDy;
+    }
+
     puck.y = isTopPaddle ? (paddleY + paddleHeight + puck.radius) : (paddleY - puck.radius);
 
     // ショットタイプを記録
