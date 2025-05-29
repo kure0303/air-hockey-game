@@ -65,13 +65,11 @@ canvas {
     display: flex;
     justify-content: center;
     align-items: center;
-    border-radius: 10px;
 }
 
 .menu-content {
     background-color: #fff;
     padding: 2em;
-    border-radius: 10px;
     text-align: center;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
     width: 80%;
