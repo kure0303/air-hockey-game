@@ -7,11 +7,38 @@ const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 // キャンバスのサイズ設定
 function resizeCanvas() {
     const container = canvas.parentElement;
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
     const containerWidth = container.clientWidth;
-    const aspectRatio = 2; // 高さは幅の2倍
 
-    canvas.width = Math.min(400, containerWidth);
-    canvas.height = canvas.width * aspectRatio;
+    // モバイルデバイスの場合
+    if (isMobile) {
+        // 画面の向きに応じて調整
+        const isLandscape = windowWidth > windowHeight;
+        let targetWidth, targetHeight;
+
+        if (isLandscape) {
+            targetHeight = Math.min(windowHeight * 0.8, 400);
+            targetWidth = targetHeight / 2;
+        } else {
+            targetWidth = Math.min(windowWidth * 0.95, 400);
+            targetHeight = targetWidth * 2;
+        }
+
+        // 実際のキャンバスサイズを設定
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        // 表示サイズを設定
+        canvas.style.width = `${targetWidth}px`;
+        canvas.style.height = `${targetHeight}px`;
+    } else {
+        // PCの場合は従来通り
+        canvas.width = Math.min(400, containerWidth);
+        canvas.height = canvas.width * 2;
+        canvas.style.width = `${canvas.width}px`;
+        canvas.style.height = `${canvas.height}px`;
+    }
 
     // パドルとパックのサイズを更新
     paddleWidth = canvas.width * 0.15;
@@ -21,16 +48,32 @@ function resizeCanvas() {
     // パドルの位置を更新
     if (aiPaddleX === undefined) {
         aiPaddleX = canvas.width / 2 - paddleWidth / 2;
+    } else {
+        // 既存のパドルの相対位置を維持
+        aiPaddleX = (aiPaddleX / prevWidth) * canvas.width;
     }
+
     if (playerPaddleX === undefined) {
         playerPaddleX = canvas.width / 2 - paddleWidth / 2;
+    } else {
+        // 既存のパドルの相対位置を維持
+        playerPaddleX = (playerPaddleX / prevWidth) * canvas.width;
     }
 
     // パックの位置を更新
-    if (puck.x === undefined) {
-        resetPuck(true);
+    if (puck.x !== undefined) {
+        puck.x = (puck.x / prevWidth) * canvas.width;
+        puck.y = (puck.y / prevHeight) * canvas.height;
     }
+
+    // 現在のサイズを保存
+    prevWidth = canvas.width;
+    prevHeight = canvas.height;
 }
+
+// 前回のキャンバスサイズを保持
+let prevWidth = 0;
+let prevHeight = 0;
 
 // ゲームの状態
 const GAME_STATE = {
@@ -191,9 +234,19 @@ if (!isMobile) {
     });
 }
 
-// ウィンドウリサイズ時の処理
+// リサイズイベントの処理を改善
+let resizeTimeout;
 window.addEventListener('resize', () => {
-    resizeCanvas();
+    // リサイズ中の連続実行を防ぐ
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        resizeCanvas();
+    }, 250);
+});
+
+// 画面回転時の処理を追加
+window.addEventListener('orientationchange', () => {
+    setTimeout(resizeCanvas, 100);
 });
 
 // UI要素

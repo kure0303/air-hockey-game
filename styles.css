@@ -4,6 +4,7 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    height: 100vh;
     background-color: #f0f0f0;
     font-family: Arial, sans-serif;
     touch-action: none;
@@ -11,6 +12,9 @@ body {
     -webkit-user-select: none;
     user-select: none;
     overflow: hidden;
+    padding: 0;
+    position: fixed;
+    width: 100%;
 }
 
 .game-container {
@@ -18,22 +22,38 @@ body {
     position: relative;
     width: 100%;
     max-width: 400px;
+    margin: 0 auto;
+    padding: 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
 }
 
 canvas {
     background-color: #000;
     border: 2px solid #333;
     border-radius: 10px;
-    width: 100%;
+    max-width: 100%;
     height: auto;
     touch-action: none;
+    display: block;
+    margin: 0 auto;
+    box-sizing: border-box;
 }
 
 .score {
     font-size: 2em;
-    margin-top: 20px;
+    margin-top: 10px;
     color: #333;
     font-weight: bold;
+    padding: 5px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 5px;
+    position: relative;
+    z-index: 1;
 }
 
 .overlay {
@@ -126,14 +146,30 @@ button:hover {
     }
 }
 
-/* スマートフォン向けの調整 */
+/* モバイル向けの調整 */
 @media (max-width: 480px) {
+    body {
+        padding: 0;
+    }
+
+    .game-container {
+        padding: 5px;
+        height: 100vh;
+    }
+
+    canvas {
+        max-height: 80vh;
+    }
+
     .menu-content {
-        padding: 1.5em;
+        padding: 1em;
+        width: 90%;
+        max-width: 300px;
     }
 
     .menu-content h1 {
         font-size: 1.3em;
+        margin-top: 0.5em;
     }
 
     .menu-content h2 {
@@ -142,10 +178,44 @@ button:hover {
 
     .menu-content p {
         font-size: 0.9em;
+        margin: 0.3em 0;
+    }
+
+    .controls {
+        margin-top: 1em;
+        padding: 0.8em;
     }
 
     button {
-        padding: 0.6em 1.2em;
+        padding: 0.6em 1em;
         font-size: 1em;
+        margin: 0.3em;
+    }
+
+    .score {
+        font-size: 1.5em;
+        margin-top: 5px;
+    }
+}
+
+/* 横向き対応 */
+@media (max-height: 480px) and (orientation: landscape) {
+    .game-container {
+        padding: 5px;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+    }
+
+    canvas {
+        max-height: 90vh;
+        margin: 0;
+    }
+
+    .score {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
     }
 }
