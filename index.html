@@ -69,6 +69,68 @@
             margin-bottom: 5px;
         }
 
+        .upgrade-display {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            max-width: 800px;
+            margin: 10px auto 0;
+        }
+
+        .upgrade-display h4 {
+            margin: 0 0 8px 0;
+            color: #3498db;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .upgrade-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            min-height: 24px;
+        }
+
+        .upgrade-item {
+            background-color: rgba(52, 152, 219, 0.2);
+            color: #ecf0f1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid #3498db;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upgrade-item.rare {
+            background-color: rgba(142, 68, 173, 0.2);
+            border-color: #8e44ad;
+            color: #f1c40f;
+        }
+
+        .upgrade-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+            animation: shine 2s infinite;
+        }
+
+        @keyframes shine {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
         .screen {
             position: absolute;
             top: 50%;
@@ -320,6 +382,12 @@
         </div>
         <div class="match-info">
             Match: <span id="currentMatch">1</span>/3
+        </div>
+        <div id="upgradeDisplay" class="upgrade-display">
+            <div class="player-upgrades">
+                <h4>プレイヤーのアップグレード</h4>
+                <div id="playerUpgradeList" class="upgrade-list"></div>
+            </div>
         </div>
     </div>
     <div id="gameContainer">

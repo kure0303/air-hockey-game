@@ -320,6 +320,9 @@ function startGame() {
         upgradeManager.reset();
     }
 
+    // アップグレード表示を初期化
+    updateUpgradeDisplay();
+
     currentState = GAME_STATE.PLAYING;
     document.getElementById('startScreen').classList.add('hidden');
     initializePuck();
@@ -355,6 +358,9 @@ function resetGame() {
     if (upgradeManager) {
         upgradeManager.reset();
     }
+
+    // アップグレード表示をクリア
+    updateUpgradeDisplay();
 
     randomizeAITraits();
 
@@ -488,11 +494,21 @@ function applyMagneticEffect(force) {
     }
 }
 
-// パックの速度を制限する
+// パックの速度を制限する（強化版）
 function limitPuckSpeed() {
     const currentSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
-    if (currentSpeed > MAX_PUCK_SPEED) {
-        const ratio = MAX_PUCK_SPEED / currentSpeed;
+    const maxSpeed = MAX_PUCK_SPEED;
+
+    if (currentSpeed > maxSpeed) {
+        const ratio = maxSpeed / currentSpeed;
+        puck.dx *= ratio;
+        puck.dy *= ratio;
+    }
+
+    // 最低速度も保証
+    const minSpeed = INITIAL_PUCK_SPEED * 0.5;
+    if (currentSpeed < minSpeed && currentSpeed > 0) {
+        const ratio = minSpeed / currentSpeed;
         puck.dx *= ratio;
         puck.dy *= ratio;
     }
@@ -566,7 +582,7 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
         return;
     }
 
-    // 現在のアップグレード効果を取得
+    // プレイヤーのパドルのみにアップグレード効果を適用
     const activeEffects = isTopPaddle ? [] : Array.from(upgradeManager.activeUpgrades.values());
 
     let baseSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
@@ -574,9 +590,28 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     let knockbackPower = 1.0;
     let angleAdjustment = 1.0;
 
+    // AIのパドルでは基本的な反射のみ
+    if (isTopPaddle) {
+        const newSpeed = Math.min(baseSpeed * 1.05, MAX_PUCK_SPEED * 0.8); // AIは控えめな速度
+        const angle = normalizedHitX * Math.PI / 4; // より控えめな角度
+
+        puck.dx = Math.sin(angle) * newSpeed;
+        puck.dy = Math.cos(angle) * newSpeed;
+        puck.y = paddleY + paddleHeight + puck.radius;
+
+        // エフェクトの作成
+        createParticles(puck.x, puck.y, '#ff6b6b');
+        createFlash('#ff6b6b33');
+
+        // パックの速度を制限
+        limitPuckSpeed();
+        return;
+    }
+
+    // プレイヤーのパドルの場合のみアップグレード効果を適用
     // 百錬自得カウンターの発動チェック
     const perfectCounter = activeEffects.find(u => u.id === 'hundredReflexCounter');
-    if (perfectCounter && !isTopPaddle) {
+    if (perfectCounter) {
         const timingSweetSpot = Math.abs(puck.y - (canvas.height - paddleHeight)) < perfectCounter.effect.perfectTimingWindow;
         if (timingSweetSpot) {
             speedMultiplier *= perfectCounter.effect.speedBoostMultiplier;
@@ -590,7 +625,7 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
 
     // 重波動ショットの効果
     const heavyWave = activeEffects.find(u => u.id === 'heavyWave');
-    if (heavyWave && !isTopPaddle) {
+    if (heavyWave) {
         speedMultiplier *= heavyWave.effect.puckSpeedMultiplier;
         knockbackPower *= heavyWave.effect.knockbackPower;
         if (effectSystem) {
@@ -598,23 +633,23 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
         }
         puck.lastHitUpgrade = heavyWave;
 
-        // コントロール低下効果を適用
+        // コントロール低下効果を適用（AIにのみ）
         upgradeManager.addTemporaryEffect('controlReduction', {
             factor: heavyWave.effect.controlReduction
         }, heavyWave.effect.controlReductionDuration);
     }
 
     // 基本的な跳ね返り計算
-    const newSpeed = baseSpeed * 1.1 * speedMultiplier;
+    const newSpeed = Math.min(baseSpeed * 1.1 * speedMultiplier, MAX_PUCK_SPEED);
     const angle = normalizedHitX * Math.PI / 3 * angleAdjustment;
 
     puck.dx = Math.sin(angle) * newSpeed;
-    puck.dy = (isTopPaddle ? 1 : -1) * Math.cos(angle) * newSpeed;
-    puck.y = isTopPaddle ? paddleY + paddleHeight + puck.radius : paddleY - puck.radius;
+    puck.dy = -Math.cos(angle) * newSpeed;
+    puck.y = paddleY - puck.radius;
 
     // ステルス・スネイクの効果
     const stealthSnake = activeEffects.find(u => u.id === 'stealthSnake');
-    if (stealthSnake && !isTopPaddle) {
+    if (stealthSnake) {
         puck.activeEffects.add('stealth');
         setTimeout(() => {
             puck.activeEffects.delete('stealth');
@@ -624,24 +659,24 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
 
     // 氷結フィールドショットの効果
     const iceField = activeEffects.find(u => u.id === 'iceFieldShot');
-    if (iceField && !isTopPaddle) {
+    if (iceField) {
         puck.activeEffects.add('ice');
         puck.lastHitUpgrade = iceField;
     }
 
     // 破滅への誘引の効果
     const doom = activeEffects.find(u => u.id === 'doomInducement');
-    if (doom && !isTopPaddle) {
+    if (doom) {
         puck.activeEffects.add('doom');
         puck.lastHitUpgrade = doom;
     }
 
     // エフェクトの作成
-    createParticles(puck.x, puck.y, isTopPaddle ? '#ff6b6b' : '#4ecdc4');
-    createFlash(isTopPaddle ? '#ff6b6b33' : '#4ecdc433');
+    createParticles(puck.x, puck.y, '#4ecdc4');
+    createFlash('#4ecdc433');
 
-    // ノックバック効果の適用
-    if (isTopPaddle && knockbackPower > 1 && heavyWave) {
+    // ノックバック効果の適用（AIにのみ）
+    if (knockbackPower > 1 && heavyWave) {
         upgradeManager.addTemporaryEffect('knockback', {
             factor: knockbackPower
         }, heavyWave.effect.controlReductionDuration);
@@ -1071,6 +1106,9 @@ function selectUpgrade(upgrade) {
     console.log('Processing upgrade selection:', upgrade.name);
 
     if (applyUpgrade(upgrade)) {
+        // アップグレード表示を更新
+        updateUpgradeDisplay();
+
         // アップグレード画面を閉じて次の試合を準備
         document.getElementById('upgradeScreen').classList.add('hidden');
         resetForNextMatch();
@@ -1310,6 +1348,33 @@ function applyUpgrade(upgrade) {
         showErrorMessage('アップグレードの適用に失敗しました。');
         return false;
     }
+}
+
+// アップグレード表示の更新
+function updateUpgradeDisplay() {
+    const playerUpgradeList = document.getElementById('playerUpgradeList');
+    if (!playerUpgradeList || !upgradeManager) return;
+
+    playerUpgradeList.innerHTML = '';
+
+    const activeUpgrades = Array.from(upgradeManager.activeUpgrades.values());
+
+    if (activeUpgrades.length === 0) {
+        const noUpgrades = document.createElement('div');
+        noUpgrades.textContent = 'アップグレードなし';
+        noUpgrades.style.color = '#7f8c8d';
+        noUpgrades.style.fontSize = '12px';
+        playerUpgradeList.appendChild(noUpgrades);
+        return;
+    }
+
+    activeUpgrades.forEach(upgrade => {
+        const upgradeItem = document.createElement('div');
+        upgradeItem.className = `upgrade-item ${upgrade.type === UPGRADE_TYPES.RARE ? 'rare' : ''}`;
+        upgradeItem.textContent = upgrade.name;
+        upgradeItem.title = upgrade.description;
+        playerUpgradeList.appendChild(upgradeItem);
+    });
 }
 
 // ゲームの初期化を改善
