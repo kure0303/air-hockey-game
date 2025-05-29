@@ -380,3 +380,5 @@ class EffectSystem {
     }
 }
 
+let effectSystem = null;
+let upgradeManager = new UpgradeManager();

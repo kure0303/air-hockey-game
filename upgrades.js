@@ -297,6 +297,3 @@ class UpgradeManager {
         this.matchCount = 0;
     }
 }
-
-// グローバルなアップグレードマネージャーのインスタンスを作成
-const upgradeManager = new UpgradeManager();
