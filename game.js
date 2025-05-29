@@ -445,16 +445,24 @@ function moveAI() {
     const baseSpeed = AI_BASE_SPEED * aiTraits.speed;
     let speedMultiplier = 1.0;
 
-    // 一時的な速度低下効果
-    if (upgradeManager && upgradeManager.hasTemporaryEffect('iceField')) {
-        const effect = upgradeManager.temporaryEffects.get('iceField');
-        speedMultiplier *= effect.effect.slowdownFactor;
-    }
+    // AIのスピードアップ効果（重複対応）
+    if (aiUpgradeManager) {
+        const speedUpgrades = aiUpgradeManager.upgradeInstances.filter(u => u.id === 'speedUpSmall');
+        speedUpgrades.forEach(speedUpgrade => {
+            speedMultiplier *= speedUpgrade.effect.paddleSpeedMultiplier;
+        });
 
-    // ノックバック効果
-    if (upgradeManager && upgradeManager.hasTemporaryEffect('knockback')) {
-        const effect = upgradeManager.temporaryEffects.get('knockback');
-        speedMultiplier *= (1 / effect.effect.factor);
+        // 一時的な速度低下効果（相手からの攻撃）
+        if (aiUpgradeManager.hasTemporaryEffect('iceField')) {
+            const effect = aiUpgradeManager.temporaryEffects.get('iceField');
+            speedMultiplier *= effect.effect.slowdownFactor;
+        }
+
+        // ノックバック効果（相手からの攻撃）
+        if (aiUpgradeManager.hasTemporaryEffect('knockback')) {
+            const effect = aiUpgradeManager.temporaryEffects.get('knockback');
+            speedMultiplier *= (1 / effect.effect.factor);
+        }
     }
 
     const AI_SPEED = baseSpeed * speedMultiplier;
@@ -578,41 +586,49 @@ function createFlash(color) {
 // パドルとの衝突判定と処理
 function handlePaddleCollisions() {
     // エラーチェック
-    if (!upgradeManager) {
-        console.warn('Upgrade manager not initialized');
+    if (!upgradeManager || !aiUpgradeManager) {
+        console.warn('Upgrade managers not initialized');
         return;
     }
 
-    // デフォルト値を使用
-    let paddleWidthMultiplier = 1.0;
-
-    // アップグレード効果を安全に取得
-    try {
-        const widthMultiplier = upgradeManager.getUpgradeEffect(UPGRADE_TYPES.COMMON, 'paddleWidthMultiplier');
-        if (widthMultiplier && widthMultiplier > 0) {
-            paddleWidthMultiplier = widthMultiplier;
+    // プレイヤーのパドル幅を計算（重複対応）
+    let playerPaddleWidthMultiplier = 1.0;
+    const playerWidthUpgrades = upgradeManager.upgradeInstances.filter(u => u.id === 'widthUpSmall');
+    playerWidthUpgrades.forEach(widthUpgrade => {
+        if (widthUpgrade.effect && widthUpgrade.effect.paddleWidthMultiplier) {
+            playerPaddleWidthMultiplier *= widthUpgrade.effect.paddleWidthMultiplier;
         }
-    } catch (error) {
-        console.warn('Error getting paddle width multiplier:', error);
-    }
+    });
 
-    const effectivePaddleWidth = paddleWidth * paddleWidthMultiplier;
-    const paddleOffset = (effectivePaddleWidth - paddleWidth) / 2;
+    // AIのパドル幅を計算（重複対応）
+    let aiPaddleWidthMultiplier = 1.0;
+    const aiWidthUpgrades = aiUpgradeManager.upgradeInstances.filter(u => u.id === 'widthUpSmall');
+    aiWidthUpgrades.forEach(widthUpgrade => {
+        if (widthUpgrade.effect && widthUpgrade.effect.paddleWidthMultiplier) {
+            aiPaddleWidthMultiplier *= widthUpgrade.effect.paddleWidthMultiplier;
+        }
+    });
 
     // AIのパドル（上側）との衝突
+    const aiEffectivePaddleWidth = paddleWidth * aiPaddleWidthMultiplier;
+    const aiPaddleOffset = (aiEffectivePaddleWidth - paddleWidth) / 2;
+
     if (puck.y - puck.radius < paddleHeight &&
-        puck.x > aiPaddleX - paddleOffset &&
-        puck.x < aiPaddleX + effectivePaddleWidth &&
+        puck.x > aiPaddleX - aiPaddleOffset &&
+        puck.x < aiPaddleX + aiEffectivePaddleWidth &&
         puck.dy < 0) {
-        handlePaddleCollision(aiPaddleX - paddleOffset, 0, true, effectivePaddleWidth);
+        handlePaddleCollision(aiPaddleX - aiPaddleOffset, 0, true, aiEffectivePaddleWidth);
     }
 
     // プレイヤーのパドル（下側）との衝突
+    const playerEffectivePaddleWidth = paddleWidth * playerPaddleWidthMultiplier;
+    const playerPaddleOffset = (playerEffectivePaddleWidth - paddleWidth) / 2;
+
     if (puck.y + puck.radius > canvas.height - paddleHeight &&
-        puck.x > playerPaddleX - paddleOffset &&
-        puck.x < playerPaddleX + effectivePaddleWidth &&
+        puck.x > playerPaddleX - playerPaddleOffset &&
+        puck.x < playerPaddleX + playerEffectivePaddleWidth &&
         puck.dy > 0) {
-        handlePaddleCollision(playerPaddleX - paddleOffset, canvas.height - paddleHeight, false, effectivePaddleWidth);
+        handlePaddleCollision(playerPaddleX - playerPaddleOffset, canvas.height - paddleHeight, false, playerEffectivePaddleWidth);
     }
 }
 
@@ -623,44 +639,32 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     const normalizedHitX = hitX / (effectivePaddleWidth / 2);
 
     // エラーチェック
-    if (!upgradeManager) {
-        console.warn('Upgrade manager not initialized in paddle collision');
+    if (!upgradeManager || !aiUpgradeManager) {
+        console.warn('Upgrade managers not initialized in paddle collision');
         // 基本的な反射のみ行う
         puck.dy = -puck.dy;
         return;
     }
 
-    // プレイヤーのパドルのみにアップグレード効果を適用
-    const activeEffects = isTopPaddle ? [] : upgradeManager.upgradeInstances;
+    // AIまたはプレイヤーのアップグレード効果を取得
+    const activeEffects = isTopPaddle ? aiUpgradeManager.upgradeInstances : upgradeManager.upgradeInstances;
+    const currentManager = isTopPaddle ? aiUpgradeManager : upgradeManager;
 
     let baseSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
     let speedMultiplier = 1.0;
     let knockbackPower = 1.0;
     let angleAdjustment = 1.0;
 
-    // AIのパドルでは基本的な反射のみ
-    if (isTopPaddle) {
-        const newSpeed = Math.min(baseSpeed * 1.05, MAX_PUCK_SPEED * 0.8); // AIは控えめな速度
-        const angle = normalizedHitX * Math.PI / 4; // より控えめな角度
+    // 基本的な反射設定
+    const baseSpeedBoost = isTopPaddle ? 1.05 : 1.1;
+    const maxSpeedRatio = isTopPaddle ? 0.8 : 1.0;
+    const angleRange = isTopPaddle ? Math.PI / 4 : Math.PI / 3;
 
-        puck.dx = Math.sin(angle) * newSpeed;
-        puck.dy = Math.cos(angle) * newSpeed;
-        puck.y = paddleY + paddleHeight + puck.radius;
-
-        // エフェクトの作成
-        createParticles(puck.x, puck.y, '#ff6b6b');
-        createFlash('#ff6b6b33');
-
-        // パックの速度を制限
-        limitPuckSpeed();
-        return;
-    }
-
-    // プレイヤーのパドルの場合のみアップグレード効果を適用
     // 百錬自得カウンターの発動チェック
     const perfectCounters = activeEffects.filter(u => u.id === 'hundredReflexCounter');
     perfectCounters.forEach(perfectCounter => {
-        const timingSweetSpot = Math.abs(puck.y - (canvas.height - paddleHeight)) < perfectCounter.effect.perfectTimingWindow;
+        const targetY = isTopPaddle ? paddleHeight : (canvas.height - paddleHeight);
+        const timingSweetSpot = Math.abs(puck.y - targetY) < perfectCounter.effect.perfectTimingWindow;
         if (timingSweetSpot) {
             speedMultiplier *= perfectCounter.effect.speedBoostMultiplier;
             angleAdjustment *= perfectCounter.effect.angleAdjustment;
@@ -681,19 +685,20 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
         }
         puck.lastHitUpgrade = heavyWave;
 
-        // コントロール低下効果を適用（AIにのみ）
-        upgradeManager.addTemporaryEffect('controlReduction', {
+        // コントロール低下効果を相手に適用
+        const targetManager = isTopPaddle ? upgradeManager : aiUpgradeManager;
+        targetManager.addTemporaryEffect('controlReduction', {
             factor: heavyWave.effect.controlReduction
         }, heavyWave.effect.controlReductionDuration);
     });
 
     // 基本的な跳ね返り計算
-    const newSpeed = Math.min(baseSpeed * 1.1 * speedMultiplier, MAX_PUCK_SPEED);
-    const angle = normalizedHitX * Math.PI / 3 * angleAdjustment;
+    const newSpeed = Math.min(baseSpeed * baseSpeedBoost * speedMultiplier, MAX_PUCK_SPEED * maxSpeedRatio);
+    const angle = normalizedHitX * angleRange * angleAdjustment;
 
     puck.dx = Math.sin(angle) * newSpeed;
-    puck.dy = -Math.cos(angle) * newSpeed;
-    puck.y = paddleY - puck.radius;
+    puck.dy = (isTopPaddle ? 1 : -1) * Math.cos(angle) * newSpeed;
+    puck.y = isTopPaddle ? (paddleY + paddleHeight + puck.radius) : (paddleY - puck.radius);
 
     // ステルス・スネイクの効果（重複可能）
     const stealthSnakes = activeEffects.filter(u => u.id === 'stealthSnake');
@@ -719,13 +724,16 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
         puck.lastHitUpgrade = doom;
     });
 
-    // エフェクトの作成
-    createParticles(puck.x, puck.y, '#4ecdc4');
-    createFlash('#4ecdc433');
+    // エフェクトの作成（それぞれの色で）
+    const paddleColor = isTopPaddle ? '#ff6b6b' : '#4ecdc4';
+    const flashColor = isTopPaddle ? '#ff6b6b33' : '#4ecdc433';
+    createParticles(puck.x, puck.y, paddleColor);
+    createFlash(flashColor);
 
-    // ノックバック効果の適用（AIにのみ）
+    // ノックバック効果の適用（相手に）
     if (knockbackPower > 1 && heavyWaves.length > 0) {
-        upgradeManager.addTemporaryEffect('knockback', {
+        const targetManager = isTopPaddle ? upgradeManager : aiUpgradeManager;
+        targetManager.addTemporaryEffect('knockback', {
             factor: knockbackPower
         }, heavyWaves[0].effect.controlReductionDuration);
     }
@@ -992,33 +1000,45 @@ function drawWallGuide() {
 
 // パドルの描画
 function drawPaddles() {
-    // パドルの幅を計算（重複対応）
-    let paddleWidthMultiplier = 1.0;
-
-    // 通常の幅アップ効果を安全に取得（重複対応）
+    // プレイヤーのパドル幅を計算（重複対応）
+    let playerPaddleWidthMultiplier = 1.0;
     if (upgradeManager) {
         const widthUpgrades = upgradeManager.upgradeInstances.filter(u => u.id === 'widthUpSmall');
         widthUpgrades.forEach(widthUpgrade => {
             if (widthUpgrade.effect && widthUpgrade.effect.paddleWidthMultiplier) {
-                paddleWidthMultiplier *= widthUpgrade.effect.paddleWidthMultiplier;
+                playerPaddleWidthMultiplier *= widthUpgrade.effect.paddleWidthMultiplier;
             }
         });
     }
 
-    const effectivePaddleWidth = paddleWidth * paddleWidthMultiplier;
-    const paddleOffset = (effectivePaddleWidth - paddleWidth) / 2;
+    // AIのパドル幅を計算（重複対応）
+    let aiPaddleWidthMultiplier = 1.0;
+    if (aiUpgradeManager) {
+        const aiWidthUpgrades = aiUpgradeManager.upgradeInstances.filter(u => u.id === 'widthUpSmall');
+        aiWidthUpgrades.forEach(widthUpgrade => {
+            if (widthUpgrade.effect && widthUpgrade.effect.paddleWidthMultiplier) {
+                aiPaddleWidthMultiplier *= widthUpgrade.effect.paddleWidthMultiplier;
+            }
+        });
+    }
+
+    const playerEffectivePaddleWidth = paddleWidth * playerPaddleWidthMultiplier;
+    const playerPaddleOffset = (playerEffectivePaddleWidth - paddleWidth) / 2;
+
+    const aiEffectivePaddleWidth = paddleWidth * aiPaddleWidthMultiplier;
+    const aiPaddleOffset = (aiEffectivePaddleWidth - paddleWidth) / 2;
 
     // AIのパドル
     ctx.fillStyle = '#ff6b6b';
-    if (upgradeManager && upgradeManager.hasTemporaryEffect('nullification')) {
+    if (aiUpgradeManager && aiUpgradeManager.hasTemporaryEffect('nullification')) {
         ctx.globalAlpha = 0.5;
     }
-    ctx.fillRect(aiPaddleX - paddleOffset, 0, effectivePaddleWidth, paddleHeight);
+    ctx.fillRect(aiPaddleX - aiPaddleOffset, 0, aiEffectivePaddleWidth, paddleHeight);
     ctx.globalAlpha = 1.0;
 
     // プレイヤーのパドル
     ctx.fillStyle = '#4ecdc4';
-    ctx.fillRect(playerPaddleX - paddleOffset, canvas.height - paddleHeight, effectivePaddleWidth, paddleHeight);
+    ctx.fillRect(playerPaddleX - playerPaddleOffset, canvas.height - paddleHeight, playerEffectivePaddleWidth, paddleHeight);
 
     // パドルのエフェクト（重複対応）
     if (upgradeManager && typeof EFFECT_TYPES !== 'undefined') {
@@ -1031,9 +1051,30 @@ function drawPaddles() {
                 ctx.fillStyle = '#4ecdc4';
                 ctx.globalAlpha = 0.3;
                 ctx.fillRect(
-                    playerPaddleX - paddleOffset - 5,
+                    playerPaddleX - playerPaddleOffset - 5,
                     canvas.height - paddleHeight,
-                    effectivePaddleWidth + 10,
+                    playerEffectivePaddleWidth + 10,
+                    paddleHeight
+                );
+                ctx.restore();
+            }
+        });
+    }
+
+    // AIのパドルエフェクト（重複対応）
+    if (aiUpgradeManager && typeof EFFECT_TYPES !== 'undefined') {
+        const aiPaddleEffects = aiUpgradeManager.upgradeInstances.filter(upgrade =>
+            upgrade.visualEffect && upgrade.visualEffect.type === EFFECT_TYPES.PADDLE
+        );
+        aiPaddleEffects.forEach(upgrade => {
+            if (upgrade.visualEffect && upgrade.visualEffect.afterImage) {
+                ctx.save();
+                ctx.fillStyle = '#ff6b6b';
+                ctx.globalAlpha = 0.3;
+                ctx.fillRect(
+                    aiPaddleX - aiPaddleOffset - 5,
+                    0,
+                    aiEffectivePaddleWidth + 10,
                     paddleHeight
                 );
                 ctx.restore();
@@ -1102,8 +1143,8 @@ function showUpgradeScreen() {
     upgradeChoices.innerHTML = '';
 
     // エラーチェック
-    if (!upgradeManager) {
-        console.error('Upgrade manager not initialized');
+    if (!upgradeManager || !aiUpgradeManager) {
+        console.error('Upgrade managers not initialized');
         showErrorMessage('アップグレードシステムにエラーが発生しました。');
         return;
     }
