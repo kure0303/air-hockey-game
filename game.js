@@ -258,6 +258,14 @@ const restartButton = document.getElementById('restartButton');
 const playAgainButton = document.getElementById('playAgainButton');
 const winnerMessage = document.getElementById('winnerMessage');
 
+// 新しいUI要素
+const techniqueInfoButton = document.getElementById('techniqueInfoButton');
+const upgradeInfoButton = document.getElementById('upgradeInfoButton');
+const techniqueInfoOverlay = document.getElementById('techniqueInfoOverlay');
+const upgradeInfoOverlay = document.getElementById('upgradeInfoOverlay');
+const closeTechniqueInfo = document.getElementById('closeTechniqueInfo');
+const closeUpgradeInfo = document.getElementById('closeUpgradeInfo');
+
 // キー入力の状態
 const keys = {
     ArrowLeft: false,
@@ -374,6 +382,36 @@ startButton.addEventListener('click', startGame);
 resumeButton.addEventListener('click', resumeGame);
 restartButton.addEventListener('click', resetGame);
 playAgainButton.addEventListener('click', resetGame);
+
+// 新しいUI要素のイベントリスナー
+techniqueInfoButton.addEventListener('click', showTechniqueInfo);
+upgradeInfoButton.addEventListener('click', showUpgradeInfo);
+closeTechniqueInfo.addEventListener('click', hideTechniqueInfo);
+closeUpgradeInfo.addEventListener('click', hideUpgradeInfo);
+
+// オーバーレイクリックで閉じる
+techniqueInfoOverlay.addEventListener('click', (e) => {
+    if (e.target === techniqueInfoOverlay) {
+        hideTechniqueInfo();
+    }
+});
+
+upgradeInfoOverlay.addEventListener('click', (e) => {
+    if (e.target === upgradeInfoOverlay) {
+        hideUpgradeInfo();
+    }
+});
+
+// ESCキーで情報パネルを閉じる
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (techniqueInfoOverlay.classList.contains('active')) {
+            hideTechniqueInfo();
+        } else if (upgradeInfoOverlay.classList.contains('active')) {
+            hideUpgradeInfo();
+        }
+    }
+});
 
 // ゲーム開始
 function startGame() {
@@ -850,20 +888,25 @@ function movePuck() {
 
     // 回転による軌道変化（スライドショット効果）
     if (Math.abs(puck.spin) > 0.1) {
-        const spinForce = puck.spin * 0.3; // 回転の強さを調整
-        puck.targetDx += spinForce * Math.sign(puck.dy); // 回転方向によって横に曲がる
+        // 物理的に自然な回転効果：ボールの回転による軌道変化
+        const spinForce = puck.spin * 0.2; // 回転効果を半減
 
-        // 回転減衰
-        puck.spin *= puck.spinDecay;
+        // 回転方向と移動方向の相互作用（マグヌス効果風）
+        const crossProduct = puck.dx * 0 - puck.dy * 1; // 垂直方向への影響
+        puck.targetDx += spinForce * Math.sign(puck.dy) * 0.4; // 影響を半減
+
+        // 自然な回転減衰（摩擦による）
+        puck.spin *= 0.994; // より早く減衰
     }
 
     // アングルショット後の継続的な減速効果
     if (puck.angleDecayDuration > 0) {
-        // 毎フレーム速度を減速
-        puck.targetDx *= puck.angleDecayFactor;
-        puck.targetDy *= puck.angleDecayFactor;
-        puck.dx *= puck.angleDecayFactor;
-        puck.dy *= puck.angleDecayFactor;
+        // 毎フレーム速度を減速（より強力）
+        const decayFactor = puck.angleDecayFactor;
+        puck.targetDx *= decayFactor;
+        puck.targetDy *= decayFactor;
+        puck.dx *= decayFactor;
+        puck.dy *= decayFactor;
 
         // 減速効果の残り時間を減らす
         puck.angleDecayDuration--;
@@ -871,6 +914,11 @@ function movePuck() {
         // 効果が終了したらリセット
         if (puck.angleDecayDuration <= 0) {
             puck.angleDecayFactor = 1.0;
+        }
+
+        // 減速中は特別なエフェクトを追加
+        if (puck.angleDecayDuration % 10 === 0) { // 10フレームに1回
+            createParticles(puck.x, puck.y, '#ff8800'); // アングル色のパーティクル
         }
     }
 
@@ -1115,17 +1163,46 @@ function drawPuck() {
 
     // 回転の可視化（スライドショット時）
     if (Math.abs(puck.spin) > 0.1) {
-        const spinRadius = puck.radius * 0.6;
-        const spinAngle = Date.now() * 0.01 * puck.spin;
+        const spinRadius = puck.radius * 0.7;
+        const spinAngle = Date.now() * 0.02 * puck.spin; // より高速回転
 
         ctx.save();
         ctx.translate(puck.x, puck.y);
         ctx.rotate(spinAngle);
-        ctx.strokeStyle = '#888';
-        ctx.lineWidth = 2;
+
+        // 回転の強さに応じて色と太さを変更
+        const spinIntensity = Math.min(Math.abs(puck.spin) / 2, 1);
+        ctx.strokeStyle = `rgba(0, 255, 136, ${0.8 * spinIntensity})`; // スライド色
+        ctx.lineWidth = 2 + spinIntensity * 2;
+
+        // 十字の回転線を描画
         ctx.beginPath();
         ctx.moveTo(-spinRadius, 0);
         ctx.lineTo(spinRadius, 0);
+        ctx.moveTo(0, -spinRadius);
+        ctx.lineTo(0, spinRadius);
+        ctx.stroke();
+
+        // 回転方向を示すマーカー
+        ctx.fillStyle = puck.spin > 0 ? '#00ff88' : '#ff6600';
+        ctx.beginPath();
+        ctx.arc(spinRadius * 0.7, 0, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // アングルショット減速中の視覚効果
+    if (puck.angleDecayDuration > 0) {
+        const decayProgress = 1 - (puck.angleDecayDuration / 180); // 0から1に変化
+        const glowRadius = puck.radius + (5 * decayProgress);
+
+        ctx.save();
+        ctx.globalAlpha = 0.3 + (0.4 * Math.sin(Date.now() * 0.01)); // 脈動効果
+        ctx.strokeStyle = '#ff8800'; // アングル色
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(puck.x, puck.y, glowRadius, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
     }
@@ -1686,26 +1763,29 @@ function applyUpgrade(upgrade) {
 
 // アップグレード表示の更新
 function updateUpgradeDisplay() {
-    // プレイヤーのアップグレード表示
-    updatePlayerUpgradeDisplay();
-    // AIのアップグレード表示
-    updateAIUpgradeDisplay();
+    // 詳細表示のアップグレード情報を更新
+    updateDetailedUpgradeDisplay();
 }
 
-function updatePlayerUpgradeDisplay() {
-    const playerUpgradeList = document.getElementById('playerUpgradeList');
-    if (!playerUpgradeList || !upgradeManager) return;
+function updateDetailedUpgradeDisplay() {
+    // プレイヤーのアップグレード表示
+    updatePlayerDetailedUpgradeDisplay();
+    // AIのアップグレード表示
+    updateAIDetailedUpgradeDisplay();
+}
 
-    playerUpgradeList.innerHTML = '';
+function updatePlayerDetailedUpgradeDisplay() {
+    const playerUpgradeListDetailed = document.getElementById('playerUpgradeListDetailed');
+    if (!playerUpgradeListDetailed || !upgradeManager) return;
+
+    playerUpgradeListDetailed.innerHTML = '';
 
     const activeUpgrades = upgradeManager.upgradeInstances;
 
     if (activeUpgrades.length === 0) {
         const noUpgrades = document.createElement('div');
-        noUpgrades.textContent = 'アップグレードなし';
-        noUpgrades.style.color = '#7f8c8d';
-        noUpgrades.style.fontSize = '12px';
-        playerUpgradeList.appendChild(noUpgrades);
+        noUpgrades.innerHTML = '<div style="text-align: center; color: #7f8c8d; padding: 20px;">アップグレードなし</div>';
+        playerUpgradeListDetailed.appendChild(noUpgrades);
         return;
     }
 
@@ -1718,27 +1798,31 @@ function updatePlayerUpgradeDisplay() {
     Object.entries(upgradeCount).forEach(([id, count]) => {
         const upgrade = activeUpgrades.find(u => u.id === id);
         const upgradeItem = document.createElement('div');
-        upgradeItem.className = `upgrade-item ${upgrade.type === UPGRADE_TYPES.RARE ? 'rare' : ''}`;
-        upgradeItem.textContent = count > 1 ? `${upgrade.name} x${count}` : upgrade.name;
-        upgradeItem.title = upgrade.description;
-        playerUpgradeList.appendChild(upgradeItem);
+        upgradeItem.className = `upgrade-item-detailed ${upgrade.type === UPGRADE_TYPES.RARE ? 'rare' : ''}`;
+
+        const countDisplay = count > 1 ? `<span class="upgrade-count">${count}</span>` : '';
+
+        upgradeItem.innerHTML = `
+            <div class="upgrade-name">${upgrade.name}${countDisplay}</div>
+            <div class="upgrade-description">${upgrade.description}</div>
+        `;
+
+        playerUpgradeListDetailed.appendChild(upgradeItem);
     });
 }
 
-function updateAIUpgradeDisplay() {
-    const aiUpgradeList = document.getElementById('aiUpgradeList');
-    if (!aiUpgradeList || !aiUpgradeManager) return;
+function updateAIDetailedUpgradeDisplay() {
+    const aiUpgradeListDetailed = document.getElementById('aiUpgradeListDetailed');
+    if (!aiUpgradeListDetailed || !aiUpgradeManager) return;
 
-    aiUpgradeList.innerHTML = '';
+    aiUpgradeListDetailed.innerHTML = '';
 
     const activeUpgrades = aiUpgradeManager.upgradeInstances;
 
     if (activeUpgrades.length === 0) {
         const noUpgrades = document.createElement('div');
-        noUpgrades.textContent = 'アップグレードなし';
-        noUpgrades.style.color = '#7f8c8d';
-        noUpgrades.style.fontSize = '12px';
-        aiUpgradeList.appendChild(noUpgrades);
+        noUpgrades.innerHTML = '<div style="text-align: center; color: #7f8c8d; padding: 20px;">アップグレードなし</div>';
+        aiUpgradeListDetailed.appendChild(noUpgrades);
         return;
     }
 
@@ -1751,11 +1835,27 @@ function updateAIUpgradeDisplay() {
     Object.entries(upgradeCount).forEach(([id, count]) => {
         const upgrade = activeUpgrades.find(u => u.id === id);
         const upgradeItem = document.createElement('div');
-        upgradeItem.className = `upgrade-item ${upgrade.type === UPGRADE_TYPES.RARE ? 'rare' : ''}`;
-        upgradeItem.textContent = count > 1 ? `${upgrade.name} x${count}` : upgrade.name;
-        upgradeItem.title = upgrade.description;
-        aiUpgradeList.appendChild(upgradeItem);
+        upgradeItem.className = `upgrade-item-detailed ${upgrade.type === UPGRADE_TYPES.RARE ? 'rare' : ''}`;
+
+        const countDisplay = count > 1 ? `<span class="upgrade-count">${count}</span>` : '';
+
+        upgradeItem.innerHTML = `
+            <div class="upgrade-name">${upgrade.name}${countDisplay}</div>
+            <div class="upgrade-description">${upgrade.description}</div>
+        `;
+
+        aiUpgradeListDetailed.appendChild(upgradeItem);
     });
+}
+
+function updatePlayerUpgradeDisplay() {
+    // 後方互換性のために残す（呼び出しがある場合）
+    updatePlayerDetailedUpgradeDisplay();
+}
+
+function updateAIUpgradeDisplay() {
+    // 後方互換性のために残す（呼び出しがある場合）
+    updateAIDetailedUpgradeDisplay();
 }
 
 // AIにランダムアップグレードを付与
@@ -1858,52 +1958,63 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     let knockbackPower = 1.0;
     let angleAdjustment = 1.0;
 
-    // テクニック判定の閾値
-    const centerHitThreshold = 0.3; // パドル中心の範囲
-    const slideThreshold = 1.5; // スライドショットの最低速度
-    const angleThreshold = 3.0; // アングルショットの最低速度
+    // テクニック判定の閾値（物理的に自然な設定）
+    const centerHitThreshold = 0.25; // パドル中心の範囲（狭く、正確性要求）
+    const slideThreshold = 1.2; // スライドショットの最低速度（発動しやすく）
+    const angleThreshold = 2.5; // アングルショットの最低速度（中程度）
 
     let shotType = 'normal';
     let isCritical = false;
     let isSlide = false;
     let isAngle = false;
+    let controlDifficulty = 1.0; // 制御難易度（高いほど制御困難）
 
-    // テクニック判定（優先順位を修正：アングル → スライド → クリティカル）
+    // === 物理法則に基づく論理的テクニック判定 ===
 
-    // 1. アングルショット判定（最高優先度：超高速移動＋端部ヒット）
-    if (Math.abs(paddleVelocity) > angleThreshold && Math.abs(normalizedHitX) > 0.8) {
-        isAngle = true;
-        shotType = 'angle';
-        speedMultiplier *= 0.8; // 制御性重視のため軽い減速
-        angleAdjustment *= 1.8; // より鋭角に
-
-        // アングルショット後の継続的な減速効果を設定
-        puck.angleDecayFactor = 0.995; // 毎フレーム0.5%ずつ減速
-        puck.angleDecayDuration = 120; // 約2秒間（60FPS基準）
-
-        // アングルエフェクト
-        createAngleEffect(puck.x, puck.y, isTopPaddle);
-    }
-    // 2. スライドショット判定（高速移動＋端部ヒット、ただしアングルの条件を満たさない場合）
-    else if (Math.abs(paddleVelocity) > slideThreshold && Math.abs(normalizedHitX) > 0.5) {
-        isSlide = true;
-        shotType = 'slide';
-        speedMultiplier *= 0.7; // スロー化
-
-        // 回転を加える（より強めに）
-        puck.spin = paddleVelocity * 0.4 * Math.sign(normalizedHitX);
-
-        // スライドエフェクト
-        createSlideEffect(puck.x, puck.y, isTopPaddle);
-    }
-    // 3. クリティカルショット判定（パドル中心ヒット、他の条件を満たさない場合）
-    else if (Math.abs(normalizedHitX) < centerHitThreshold) {
+    // 1. **パワーショット（クリティカル）** - 中心ヒット = 最大効率
+    // 物理根拠：パドル中心で打つと力の伝達が最も効率的
+    // 戦略：高威力だが直線的で読まれやすい、正確な狙いが必要
+    if (Math.abs(normalizedHitX) < centerHitThreshold) {
         isCritical = true;
         shotType = 'critical';
-        speedMultiplier *= 1.4; // クリティカル加速
+        speedMultiplier *= 1.5; // 高威力（リスクに見合うリターン）
+        angleAdjustment *= 0.7; // 角度は控えめ（直線的）
+        controlDifficulty = 0.8; // 制御しやすい
 
-        // キラッとしたエフェクト
         createCriticalEffect(puck.x, puck.y, isTopPaddle);
+    }
+    // 2. **カーブショット（スライド）** - 横滑り打法による回転
+    // 物理根拠：パドルを横滑りさせると摩擦で回転が生まれる
+    // 戦略：予測困難な軌道、威力は控えめだが安全で確実
+    else if (Math.abs(paddleVelocity) > slideThreshold && Math.abs(normalizedHitX) > 0.4) {
+        isSlide = true;
+        shotType = 'slide';
+        speedMultiplier *= 0.8; // 威力をさらに控えめに（安全性とのトレードオフ）
+        angleAdjustment *= 1.1; // 軽い角度調整
+        controlDifficulty = 0.9; // 制御しやすい
+
+        // 物理的に自然な回転：パドル移動方向による摩擦回転
+        const slideDirection = Math.sign(paddleVelocity);
+        const spinIntensity = Math.min(Math.abs(paddleVelocity) / 4.0, 1.0); // 回転強度を弱く制限
+        puck.spin = slideDirection * spinIntensity * 0.4; // 回転量を大幅に削減
+
+        createSlideEffect(puck.x, puck.y, isTopPaddle);
+    }
+    // 3. **アングルショット** - 端部ヒットによる鋭角反射
+    // 物理根拠：パドル端で打つと鋭い角度がつくが制御が困難
+    // 戦略：壁反射を活用した攻撃、高リスク・高リターン
+    else if (Math.abs(paddleVelocity) > angleThreshold && Math.abs(normalizedHitX) > 0.7) {
+        isAngle = true;
+        shotType = 'angle';
+        speedMultiplier *= 1.2; // 中程度の威力
+        angleAdjustment *= 2.0; // 鋭角反射（壁反射狙い）
+        controlDifficulty = 1.8; // 制御困難（リスク）
+
+        // アングルショットは制御困難さをランダム性で表現
+        const controlError = (Math.random() - 0.5) * 0.3 * controlDifficulty;
+        angleAdjustment += controlError;
+
+        createAngleEffect(puck.x, puck.y, isTopPaddle);
     }
 
     // 基本的な反射設定
@@ -2059,11 +2170,11 @@ function drawTechniqueIndicators() {
 
             switch (puck.lastShotType) {
                 case 'critical':
-                    displayText = 'CRITICAL HIT!';
+                    displayText = 'POWER SHOT!';
                     displayColor = '#ffff00';
                     break;
                 case 'slide':
-                    displayText = 'SLIDE SHOT';
+                    displayText = 'CURVE SHOT';
                     displayColor = '#00ff88';
                     break;
                 case 'angle':
@@ -2084,83 +2195,23 @@ function drawTechniqueIndicators() {
         }
     }
 
-    // プレイヤーのパドル速度を視覚化と数値表示
-    const playerSpeedAbs = Math.abs(playerPaddleVelocity);
-    if (playerSpeedAbs > 1) {
-        let speedText = '';
-        let speedColor = '#4488dd';
-
-        // 速度に応じてテキストと色を変更
-        if (playerSpeedAbs > 3) {
-            speedText = `超高速 ${playerSpeedAbs.toFixed(1)}`;
-            speedColor = '#ff8800'; // アングルショット色
-        } else if (playerSpeedAbs > 1.5) {
-            speedText = `高速 ${playerSpeedAbs.toFixed(1)}`;
-            speedColor = '#00ff88'; // スライドショット色
-        } else {
-            speedText = `移動 ${playerSpeedAbs.toFixed(1)}`;
-        }
-
-        ctx.globalAlpha = 0.8;
-        ctx.fillStyle = speedColor;
-        ctx.font = `${fontSize * 0.7}px Arial`;
-        ctx.textAlign = 'center';
-
-        // 影
-        ctx.fillStyle = '#000000';
-        ctx.fillText(speedText, playerPaddleX + paddleWidth / 2 + 1, canvas.height - paddleHeight - 9);
-
-        // メインテキスト
-        ctx.fillStyle = speedColor;
-        ctx.fillText(speedText, playerPaddleX + paddleWidth / 2, canvas.height - paddleHeight - 10);
-    }
-
-    // AIのパドル速度を視覚化と数値表示
-    const aiSpeedAbs = Math.abs(aiPaddleVelocity);
-    if (aiSpeedAbs > 1) {
-        let speedText = '';
-        let speedColor = '#ff6b6b';
-
-        // 速度に応じてテキストと色を変更
-        if (aiSpeedAbs > 3) {
-            speedText = `超高速 ${aiSpeedAbs.toFixed(1)}`;
-            speedColor = '#ff8800'; // アングルショット色
-        } else if (aiSpeedAbs > 1.5) {
-            speedText = `高速 ${aiSpeedAbs.toFixed(1)}`;
-            speedColor = '#00ff88'; // スライドショット色
-        } else {
-            speedText = `移動 ${aiSpeedAbs.toFixed(1)}`;
-        }
-
-        ctx.globalAlpha = 0.8;
-        ctx.fillStyle = speedColor;
-        ctx.font = `${fontSize * 0.7}px Arial`;
-        ctx.textAlign = 'center';
-
-        // 影
-        ctx.fillStyle = '#000000';
-        ctx.fillText(speedText, aiPaddleX + paddleWidth / 2 + 1, paddleHeight + 21);
-
-        // メインテキスト
-        ctx.fillStyle = speedColor;
-        ctx.fillText(speedText, aiPaddleX + paddleWidth / 2, paddleHeight + 20);
-    }
-
-    // 判定条件の説明を画面上部に表示（デバッグ用）
-    ctx.globalAlpha = 0.6;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `${fontSize * 0.6}px Arial`;
-    ctx.textAlign = 'left';
-
-    const conditionTexts = [
-        'アングル: 速度3.0+ かつ 端部0.8+',
-        'スライド: 速度1.5+ かつ 端部0.5+',
-        'クリティカル: 中心0.3以内'
-    ];
-
-    conditionTexts.forEach((text, index) => {
-        ctx.fillText(text, 10, 20 + index * 15);
-    });
-
     ctx.restore();
+}
+
+// 新しいUI表示関数
+function showTechniqueInfo() {
+    techniqueInfoOverlay.classList.add('active');
+}
+
+function hideTechniqueInfo() {
+    techniqueInfoOverlay.classList.remove('active');
+}
+
+function showUpgradeInfo() {
+    updateDetailedUpgradeDisplay();
+    upgradeInfoOverlay.classList.add('active');
+}
+
+function hideUpgradeInfo() {
+    upgradeInfoOverlay.classList.remove('active');
 }
