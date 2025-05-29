@@ -523,9 +523,17 @@ function resetPuck(aiServe) {
     puck.x = canvas.width / 2;
     puck.y = canvas.height / 2;
 
-    const angle = (Math.random() * 0.5 + 0.25) * Math.PI;
-    puck.dx = INITIAL_PUCK_SPEED * Math.cos(angle);
+    // 角度を制限して、極端な横方向の動きを防ぐ
+    const minAngle = Math.PI / 6; // 30度
+    const maxAngle = Math.PI / 3; // 60度
+    const angle = (Math.random() * (maxAngle - minAngle) + minAngle);
+
+    // 初速を設定
+    puck.dx = INITIAL_PUCK_SPEED * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
     puck.dy = INITIAL_PUCK_SPEED * Math.sin(angle) * (aiServe ? 1 : -1);
+
+    // パックの半径を設定
+    puck.radius = puckSize / 2;
 }
 
 // 描画関数
@@ -663,7 +671,8 @@ function resetForNextMatch() {
     aiScore = 0;
     currentState = GAME_STATE.PLAYING;
     updateScore();
-    initializePuck();
+    initializePaddles();
+    resetPuck(false);
 }
 
 // パックの初期化

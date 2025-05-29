@@ -82,8 +82,14 @@ const UPGRADES = [{
 
 // アップグレード選択肢の生成
 function generateUpgradeChoices(count) {
-    const shuffled = UPGRADES.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+    // 既に選択されているアップグレードを除外
+    const availableUpgrades = UPGRADES.filter(upgrade =>
+        !upgradeManager.hasUpgrade(upgrade.id)
+    );
+
+    // ランダムに選択
+    const shuffled = availableUpgrades.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(count, availableUpgrades.length));
 }
 
 // プレイヤーの現在のアップグレードを管理
@@ -105,10 +111,19 @@ class UpgradeManager {
         let effect = 1;
         this.activeUpgrades.forEach(upgrade => {
             if (upgrade.type === type && upgrade.effect[property]) {
-                effect *= upgrade.effect[property];
+                if (property.includes('Multiplier')) {
+                    effect *= upgrade.effect[property];
+                } else {
+                    effect += upgrade.effect[property];
+                }
             }
         });
         return effect;
+    }
+
+    getUpgradeByType(type) {
+        return Array.from(this.activeUpgrades.values())
+            .filter(upgrade => upgrade.type === type);
     }
 
     incrementMatch() {
