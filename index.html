@@ -84,6 +84,9 @@
             border-radius: 8px;
             max-width: 800px;
             margin: 10px auto 0;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
         }
 
         .upgrade-display h4 {
@@ -91,6 +94,10 @@
             color: #3498db;
             font-size: 16px;
             text-align: center;
+        }
+
+        .ai-upgrades h4 {
+            color: #ff6b6b;
         }
 
         .upgrade-list {
@@ -482,6 +489,10 @@
             <div class="player-upgrades">
                 <h4>プレイヤーのアップグレード</h4>
                 <div id="playerUpgradeList" class="upgrade-list"></div>
+            </div>
+            <div class="ai-upgrades">
+                <h4>AIのアップグレード</h4>
+                <div id="aiUpgradeList" class="upgrade-list"></div>
             </div>
         </div>
     </div>

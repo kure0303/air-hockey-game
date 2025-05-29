@@ -8,6 +8,9 @@ const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 let effectSystem = null;
 let upgradeManager = null;
 
+// AIのアップグレードマネージャー
+let aiUpgradeManager = null;
+
 // キャンバスのサイズ設定
 function resizeCanvas() {
     // ヘッダーの実際の高さを取得
@@ -355,6 +358,13 @@ function startGame() {
         upgradeManager.reset();
     }
 
+    // AIのアップグレードマネージャーも初期化
+    if (!aiUpgradeManager) {
+        aiUpgradeManager = new UpgradeManager();
+    } else {
+        aiUpgradeManager.reset();
+    }
+
     // アップグレード表示を初期化
     updateUpgradeDisplay();
 
@@ -392,6 +402,11 @@ function resetGame() {
     // アップグレードマネージャーをリセット
     if (upgradeManager) {
         upgradeManager.reset();
+    }
+
+    // AIのアップグレードマネージャーもリセット
+    if (aiUpgradeManager) {
+        aiUpgradeManager.reset();
     }
 
     // アップグレード表示をクリア
@@ -488,12 +503,12 @@ function movePlayer() {
     const baseSpeed = canvas.width * 0.02;
     let speedMultiplier = 1.0;
 
-    // 通常のスピードアップ効果
+    // 通常のスピードアップ効果（重複対応）
     if (upgradeManager) {
-        const speedUpgrade = upgradeManager.activeUpgrades.get('speedUpSmall');
-        if (speedUpgrade) {
+        const speedUpgrades = upgradeManager.upgradeInstances.filter(u => u.id === 'speedUpSmall');
+        speedUpgrades.forEach(speedUpgrade => {
             speedMultiplier *= speedUpgrade.effect.paddleSpeedMultiplier;
-        }
+        });
 
         // 一時的な速度低下効果（氷結フィールドなど）
         if (upgradeManager.hasTemporaryEffect('iceField')) {
@@ -645,8 +660,8 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
 
     // プレイヤーのパドルの場合のみアップグレード効果を適用
     // 百錬自得カウンターの発動チェック
-    const perfectCounter = activeEffects.find(u => u.id === 'hundredReflexCounter');
-    if (perfectCounter) {
+    const perfectCounters = activeEffects.filter(u => u.id === 'hundredReflexCounter');
+    perfectCounters.forEach(perfectCounter => {
         const timingSweetSpot = Math.abs(puck.y - (canvas.height - paddleHeight)) < perfectCounter.effect.perfectTimingWindow;
         if (timingSweetSpot) {
             speedMultiplier *= perfectCounter.effect.speedBoostMultiplier;
@@ -656,11 +671,11 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
             }
             puck.lastHitUpgrade = perfectCounter;
         }
-    }
+    });
 
-    // 重波動ショットの効果
-    const heavyWave = activeEffects.find(u => u.id === 'heavyWave');
-    if (heavyWave) {
+    // 重波動ショットの効果（重複可能）
+    const heavyWaves = activeEffects.filter(u => u.id === 'heavyWave');
+    heavyWaves.forEach(heavyWave => {
         speedMultiplier *= heavyWave.effect.puckSpeedMultiplier;
         knockbackPower *= heavyWave.effect.knockbackPower;
         if (effectSystem) {
@@ -672,7 +687,7 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
         upgradeManager.addTemporaryEffect('controlReduction', {
             factor: heavyWave.effect.controlReduction
         }, heavyWave.effect.controlReductionDuration);
-    }
+    });
 
     // 基本的な跳ね返り計算
     const newSpeed = Math.min(baseSpeed * 1.1 * speedMultiplier, MAX_PUCK_SPEED);
@@ -682,39 +697,39 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     puck.dy = -Math.cos(angle) * newSpeed;
     puck.y = paddleY - puck.radius;
 
-    // ステルス・スネイクの効果
-    const stealthSnake = activeEffects.find(u => u.id === 'stealthSnake');
-    if (stealthSnake) {
+    // ステルス・スネイクの効果（重複可能）
+    const stealthSnakes = activeEffects.filter(u => u.id === 'stealthSnake');
+    stealthSnakes.forEach(stealthSnake => {
         puck.activeEffects.add('stealth');
         setTimeout(() => {
             puck.activeEffects.delete('stealth');
         }, stealthSnake.effect.fadeOutDuration);
         puck.lastHitUpgrade = stealthSnake;
-    }
+    });
 
-    // 氷結フィールドショットの効果
-    const iceField = activeEffects.find(u => u.id === 'iceFieldShot');
-    if (iceField) {
+    // 氷結フィールドショットの効果（重複可能）
+    const iceFields = activeEffects.filter(u => u.id === 'iceFieldShot');
+    iceFields.forEach(iceField => {
         puck.activeEffects.add('ice');
         puck.lastHitUpgrade = iceField;
-    }
+    });
 
-    // 破滅への誘引の効果
-    const doom = activeEffects.find(u => u.id === 'doomInducement');
-    if (doom) {
+    // 破滅への誘引の効果（重複可能）
+    const dooms = activeEffects.filter(u => u.id === 'doomInducement');
+    dooms.forEach(doom => {
         puck.activeEffects.add('doom');
         puck.lastHitUpgrade = doom;
-    }
+    });
 
     // エフェクトの作成
     createParticles(puck.x, puck.y, '#4ecdc4');
     createFlash('#4ecdc433');
 
     // ノックバック効果の適用（AIにのみ）
-    if (knockbackPower > 1 && heavyWave) {
+    if (knockbackPower > 1 && heavyWaves.length > 0) {
         upgradeManager.addTemporaryEffect('knockback', {
             factor: knockbackPower
-        }, heavyWave.effect.controlReductionDuration);
+        }, heavyWaves[0].effect.controlReductionDuration);
     }
 
     // パックの速度を制限
@@ -847,16 +862,24 @@ function handleGoal(isAiScore) {
     }
 }
 
-// パックのリセット
+// パックのリセット（ゴール後）
 function resetPuck(aiServe) {
     puck.x = canvas.width / 2;
     puck.y = canvas.height / 2;
     puck.radius = puckSize / 2;
 
-    // 初期速度を設定
-    const angle = Math.PI / 4; // 45度
-    puck.dx = INITIAL_PUCK_SPEED * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
-    puck.dy = INITIAL_PUCK_SPEED * Math.sin(angle) * (aiServe ? 1 : -1);
+    // ゴール後は低速でゆっくりと決められた側に向かう
+    const GOAL_RESET_SPEED = 3; // 通常の半分以下の速度
+    const angle = Math.PI / 6; // 30度（より浅い角度）
+
+    puck.dx = GOAL_RESET_SPEED * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1);
+    puck.dy = GOAL_RESET_SPEED * Math.cos(angle) * (aiServe ? 1 : -1);
+
+    // エフェクトをクリア
+    puck.activeEffects.clear();
+    puck.lastHitTime = 0;
+    puck.lastHitUpgrade = null;
+    puckTrail = [];
 }
 
 // 描画関数
@@ -971,15 +994,17 @@ function drawWallGuide() {
 
 // パドルの描画
 function drawPaddles() {
-    // パドルの幅を計算
+    // パドルの幅を計算（重複対応）
     let paddleWidthMultiplier = 1.0;
 
-    // 通常の幅アップ効果を安全に取得
+    // 通常の幅アップ効果を安全に取得（重複対応）
     if (upgradeManager) {
-        const widthUpgrade = upgradeManager.activeUpgrades.get('widthUpSmall');
-        if (widthUpgrade && widthUpgrade.effect && widthUpgrade.effect.paddleWidthMultiplier) {
-            paddleWidthMultiplier *= widthUpgrade.effect.paddleWidthMultiplier;
-        }
+        const widthUpgrades = upgradeManager.upgradeInstances.filter(u => u.id === 'widthUpSmall');
+        widthUpgrades.forEach(widthUpgrade => {
+            if (widthUpgrade.effect && widthUpgrade.effect.paddleWidthMultiplier) {
+                paddleWidthMultiplier *= widthUpgrade.effect.paddleWidthMultiplier;
+            }
+        });
     }
 
     const effectivePaddleWidth = paddleWidth * paddleWidthMultiplier;
@@ -997,9 +1022,11 @@ function drawPaddles() {
     ctx.fillStyle = '#4ecdc4';
     ctx.fillRect(playerPaddleX - paddleOffset, canvas.height - paddleHeight, effectivePaddleWidth, paddleHeight);
 
-    // パドルのエフェクト
+    // パドルのエフェクト（重複対応）
     if (upgradeManager && typeof EFFECT_TYPES !== 'undefined') {
-        const paddleEffects = upgradeManager.getUpgradesWithEffectType(EFFECT_TYPES.PADDLE);
+        const paddleEffects = upgradeManager.upgradeInstances.filter(upgrade =>
+            upgrade.visualEffect && upgrade.visualEffect.type === EFFECT_TYPES.PADDLE
+        );
         paddleEffects.forEach(upgrade => {
             if (upgrade.visualEffect && upgrade.visualEffect.afterImage) {
                 ctx.save();
@@ -1141,6 +1168,9 @@ function selectUpgrade(upgrade) {
     console.log('Processing upgrade selection:', upgrade.name);
 
     if (applyUpgrade(upgrade)) {
+        // AIにもランダムアップグレードを付与
+        giveAIRandomUpgrade();
+
         // アップグレード表示を更新
         updateUpgradeDisplay();
 
@@ -1387,12 +1417,19 @@ function applyUpgrade(upgrade) {
 
 // アップグレード表示の更新
 function updateUpgradeDisplay() {
+    // プレイヤーのアップグレード表示
+    updatePlayerUpgradeDisplay();
+    // AIのアップグレード表示
+    updateAIUpgradeDisplay();
+}
+
+function updatePlayerUpgradeDisplay() {
     const playerUpgradeList = document.getElementById('playerUpgradeList');
     if (!playerUpgradeList || !upgradeManager) return;
 
     playerUpgradeList.innerHTML = '';
 
-    const activeUpgrades = Array.from(upgradeManager.activeUpgrades.values());
+    const activeUpgrades = upgradeManager.upgradeInstances;
 
     if (activeUpgrades.length === 0) {
         const noUpgrades = document.createElement('div');
@@ -1403,13 +1440,69 @@ function updateUpgradeDisplay() {
         return;
     }
 
+    // 重複したアップグレードをカウント
+    const upgradeCount = {};
     activeUpgrades.forEach(upgrade => {
+        upgradeCount[upgrade.id] = (upgradeCount[upgrade.id] || 0) + 1;
+    });
+
+    Object.entries(upgradeCount).forEach(([id, count]) => {
+        const upgrade = activeUpgrades.find(u => u.id === id);
         const upgradeItem = document.createElement('div');
         upgradeItem.className = `upgrade-item ${upgrade.type === UPGRADE_TYPES.RARE ? 'rare' : ''}`;
-        upgradeItem.textContent = upgrade.name;
+        upgradeItem.textContent = count > 1 ? `${upgrade.name} x${count}` : upgrade.name;
         upgradeItem.title = upgrade.description;
         playerUpgradeList.appendChild(upgradeItem);
     });
+}
+
+function updateAIUpgradeDisplay() {
+    const aiUpgradeList = document.getElementById('aiUpgradeList');
+    if (!aiUpgradeList || !aiUpgradeManager) return;
+
+    aiUpgradeList.innerHTML = '';
+
+    const activeUpgrades = aiUpgradeManager.upgradeInstances;
+
+    if (activeUpgrades.length === 0) {
+        const noUpgrades = document.createElement('div');
+        noUpgrades.textContent = 'アップグレードなし';
+        noUpgrades.style.color = '#7f8c8d';
+        noUpgrades.style.fontSize = '12px';
+        aiUpgradeList.appendChild(noUpgrades);
+        return;
+    }
+
+    // 重複したアップグレードをカウント
+    const upgradeCount = {};
+    activeUpgrades.forEach(upgrade => {
+        upgradeCount[upgrade.id] = (upgradeCount[upgrade.id] || 0) + 1;
+    });
+
+    Object.entries(upgradeCount).forEach(([id, count]) => {
+        const upgrade = activeUpgrades.find(u => u.id === id);
+        const upgradeItem = document.createElement('div');
+        upgradeItem.className = `upgrade-item ${upgrade.type === UPGRADE_TYPES.RARE ? 'rare' : ''}`;
+        upgradeItem.textContent = count > 1 ? `${upgrade.name} x${count}` : upgrade.name;
+        upgradeItem.title = upgrade.description;
+        aiUpgradeList.appendChild(upgradeItem);
+    });
+}
+
+// AIにランダムアップグレードを付与
+function giveAIRandomUpgrade() {
+    if (!aiUpgradeManager) return;
+
+    try {
+        const choices = generateUpgradeChoices(1);
+        if (choices.length > 0) {
+            const randomUpgrade = choices[0];
+            aiUpgradeManager.addUpgrade(randomUpgrade);
+            console.log('AI got upgrade:', randomUpgrade.name);
+        }
+    } catch (error) {
+        console.warn('Failed to give AI upgrade:', error);
+    }
 }
 
 // ゲームの初期化を改善

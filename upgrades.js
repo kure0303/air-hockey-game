@@ -176,10 +176,8 @@ const UPGRADES = [
 
 // アップグレード選択肢の生成
 function generateUpgradeChoices(count) {
-    // 既に選択されているアップグレードを除外
-    const availableUpgrades = UPGRADES.filter(upgrade =>
-        !upgradeManager.hasUpgrade(upgrade.id)
-    );
+    // 重複を許可するため、全てのアップグレードから選択
+    const availableUpgrades = [...UPGRADES];
 
     // レアとコモンを分離
     const rareUpgrades = availableUpgrades.filter(u => u.type === UPGRADE_TYPES.RARE);
@@ -204,32 +202,47 @@ function generateUpgradeChoices(count) {
 class UpgradeManager {
     constructor() {
         this.activeUpgrades = new Map();
+        this.upgradeInstances = []; // 重複したアップグレードを管理
         this.matchCount = 0;
         this.temporaryEffects = new Map();
     }
 
     addUpgrade(upgrade) {
         console.log('Adding upgrade:', upgrade);
-        this.activeUpgrades.set(upgrade.id, upgrade);
+
+        // 重複を許可するために、新しいインスタンスとして追加
+        const uniqueId = `${upgrade.id}_${Date.now()}_${Math.random()}`;
+        const upgradeInstance = {
+            ...upgrade,
+            uniqueId: uniqueId,
+            instanceId: this.upgradeInstances.length
+        };
+
+        this.upgradeInstances.push(upgradeInstance);
+        this.activeUpgrades.set(uniqueId, upgradeInstance);
     }
 
     hasUpgrade(upgradeId) {
-        return this.activeUpgrades.has(upgradeId);
+        return this.upgradeInstances.some(upgrade => upgrade.id === upgradeId);
     }
 
     getActiveEffects(type) {
-        return Array.from(this.activeUpgrades.values())
-            .filter(upgrade => upgrade.type === type);
+        return this.upgradeInstances.filter(upgrade => upgrade.type === type);
     }
 
     getUpgradeEffect(type, effectName) {
         console.log('Getting effect:', type, effectName);
         let multiplier = 1.0;
 
-        for (const upgrade of this.activeUpgrades.values()) {
+        for (const upgrade of this.upgradeInstances) {
             if (upgrade.type === type && upgrade.effect && upgrade.effect[effectName] !== undefined) {
                 console.log('Found effect in upgrade:', upgrade.id, upgrade.effect[effectName]);
-                multiplier *= upgrade.effect[effectName];
+                // 重複した効果を累積
+                if (effectName.includes('Multiplier')) {
+                    multiplier *= upgrade.effect[effectName];
+                } else {
+                    multiplier += (upgrade.effect[effectName] - 1); // 加算効果
+                }
             }
         }
 
@@ -238,7 +251,7 @@ class UpgradeManager {
     }
 
     getUpgradesWithEffectType(effectType) {
-        return Array.from(this.activeUpgrades.values())
+        return this.upgradeInstances
             .filter(upgrade => upgrade.visualEffect && upgrade.visualEffect.type === effectType);
     }
 
@@ -293,6 +306,7 @@ class UpgradeManager {
             }
         }
         this.activeUpgrades.clear();
+        this.upgradeInstances = [];
         this.temporaryEffects.clear();
         this.matchCount = 0;
     }
