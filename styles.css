@@ -229,58 +229,53 @@ button:hover {
     color: #333;
 }
 
+/* アップグレード選択画面のスタイル */
 .upgrade-menu {
-    width: 90%;
-    max-width: 600px;
+    max-width: 400px;
 }
 
 .upgrade-choices {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 15px;
-    margin: 20px 0;
+    flex-direction: column;
+    gap: 1em;
+    margin: 1em 0;
 }
 
 .upgrade-choice {
     background-color: #f8f8f8;
-    border: 2px solid #4ecdc4;
-    padding: 15px;
-    width: calc(100% - 30px);
-    max-width: 300px;
+    padding: 1em;
+    border-radius: 5px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 2px solid transparent;
 }
 
 .upgrade-choice:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    background-color: #fff;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .upgrade-choice h3 {
     color: #333;
-    margin: 0 0 10px 0;
-    font-size: 1.2em;
+    margin: 0 0 0.5em 0;
 }
 
 .upgrade-choice p {
-    color: #666;
     margin: 0;
-    font-size: 0.9em;
+    color: #666;
 }
 
-.upgrade-choice.rarity-2 {
-    border-color: #ffd700;
+.rarity-common {
+    border-color: #4ecdc4;
 }
 
-.upgrade-choice.rarity-3 {
-    border-color: #ff6b6b;
+.rarity-rare {
+    border-color: #9b59b6;
 }
 
 .match-summary {
-    margin-top: 20px;
-    padding-top: 20px;
+    margin-top: 1.5em;
+    padding-top: 1em;
     border-top: 1px solid #eee;
 }
 

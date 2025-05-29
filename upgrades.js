@@ -7,98 +7,83 @@ const UPGRADE_TYPES = {
 };
 
 // アップグレードの定義
-const UPGRADES = {
-    // パドル強化系
-    paddleSizeSmall: {
-        id: 'paddleSizeSmall',
+const UPGRADES = [{
+        id: 'paddleSize1',
         name: 'パドルサイズアップ（小）',
+        description: 'パドルのサイズが10%大きくなります',
+        type: UPGRADE_TYPES.PADDLE,
+        rarity: 'common',
+        effect: {
+            paddleWidthMultiplier: 1.1
+        }
+    },
+    {
+        id: 'paddleSize2',
+        name: 'パドルサイズアップ（中）',
         description: 'パドルのサイズが20%大きくなります',
         type: UPGRADE_TYPES.PADDLE,
-        rarity: 1,
+        rarity: 'rare',
         effect: {
             paddleWidthMultiplier: 1.2
         }
     },
-    paddleSizeMedium: {
-        id: 'paddleSizeMedium',
-        name: 'パドルサイズアップ（中）',
-        description: 'パドルのサイズが40%大きくなります',
+    {
+        id: 'speedUp',
+        name: 'スピードアップ',
+        description: 'パドルの移動速度が15%上がります',
         type: UPGRADE_TYPES.PADDLE,
-        rarity: 2,
+        rarity: 'common',
         effect: {
-            paddleWidthMultiplier: 1.4
+            paddleSpeedMultiplier: 1.15
         }
     },
-    paddleSpeedSmall: {
-        id: 'paddleSpeedSmall',
-        name: '俊敏性アップ（小）',
-        description: 'パドルの移動速度が20%上がります',
-        type: UPGRADE_TYPES.PADDLE,
-        rarity: 1,
-        effect: {
-            paddleSpeedMultiplier: 1.2
-        }
-    },
-    reflectBoost: {
+    {
         id: 'reflectBoost',
         name: 'リフレクトブースト',
-        description: 'パックを打ち返す際の初速が30%上がります',
+        description: 'パックが跳ね返るときの速度が10%上がります',
         type: UPGRADE_TYPES.PADDLE,
-        rarity: 2,
+        rarity: 'common',
         effect: {
-            reflectSpeedMultiplier: 1.3
+            reflectSpeedMultiplier: 1.1
         }
     },
-    magnetPaddle: {
+    {
         id: 'magnetPaddle',
         name: 'マグネットパドル',
-        description: 'スペースキーで短時間パックを引き寄せます',
+        description: 'スペースキーを押している間、パックを引き寄せます',
         type: UPGRADE_TYPES.SPECIAL,
-        rarity: 3,
+        rarity: 'rare',
         effect: {
-            magneticForce: 2,
-            duration: 3000, // ミリ秒
-            cooldown: 10000 // ミリ秒
+            magneticForce: 0.5,
+            cooldown: 3000
         }
     },
-    curveShot: {
+    {
         id: 'curveShot',
         name: 'カーブショット',
-        description: 'パックが軽くカーブするようになります',
-        type: UPGRADE_TYPES.PUCK,
-        rarity: 2,
+        description: 'パックが不規則に曲がるようになります',
+        type: UPGRADE_TYPES.SPECIAL,
+        rarity: 'rare',
         effect: {
             curveFactor: 0.2
         }
     },
-    heavyPuck: {
+    {
         id: 'heavyPuck',
         name: 'ヘビーパック',
-        description: 'パックが重くなり、より直線的に動きます',
+        description: 'パックの速度が遅くなりますが、コントロールしやすくなります',
         type: UPGRADE_TYPES.PUCK,
-        rarity: 2,
+        rarity: 'common',
         effect: {
-            puckWeight: 2,
-            speedMultiplier: 0.8
+            speedMultiplier: 0.85
         }
     }
-};
+];
 
-// アップグレードの選択肢を生成
-function generateUpgradeChoices(count = 3) {
-    const availableUpgrades = Object.values(UPGRADES);
-    const choices = [];
-    const usedIndices = new Set();
-
-    while (choices.length < count && usedIndices.size < availableUpgrades.length) {
-        const index = Math.floor(Math.random() * availableUpgrades.length);
-        if (!usedIndices.has(index)) {
-            usedIndices.add(index);
-            choices.push(availableUpgrades[index]);
-        }
-    }
-
-    return choices;
+// アップグレード選択肢の生成
+function generateUpgradeChoices(count) {
+    const shuffled = UPGRADES.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
 }
 
 // プレイヤーの現在のアップグレードを管理
