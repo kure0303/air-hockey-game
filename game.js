@@ -522,18 +522,12 @@ function movePuck() {
 function resetPuck(aiServe) {
     puck.x = canvas.width / 2;
     puck.y = canvas.height / 2;
-
-    // 角度を制限して、極端な横方向の動きを防ぐ
-    const minAngle = Math.PI / 6; // 30度
-    const maxAngle = Math.PI / 3; // 60度
-    const angle = (Math.random() * (maxAngle - minAngle) + minAngle);
+    puck.radius = puckSize / 2;
 
     // 初速を設定
+    const angle = Math.PI / 4; // 45度
     puck.dx = INITIAL_PUCK_SPEED * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
     puck.dy = INITIAL_PUCK_SPEED * Math.sin(angle) * (aiServe ? 1 : -1);
-
-    // パックの半径を設定
-    puck.radius = puckSize / 2;
 }
 
 // 描画関数
