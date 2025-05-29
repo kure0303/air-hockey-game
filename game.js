@@ -540,7 +540,17 @@ function draw() {
     ctx.setLineDash([]);
 
     // パドルの描画
-    drawPaddles();
+    const paddleWidthMultiplier = upgradeManager.getUpgradeEffect(UPGRADE_TYPES.PADDLE, 'paddleWidthMultiplier');
+    const effectivePaddleWidth = paddleWidth * paddleWidthMultiplier;
+    const paddleOffset = (effectivePaddleWidth - paddleWidth) / 2;
+
+    // AIのパドル
+    ctx.fillStyle = '#ff6b6b';
+    ctx.fillRect(aiPaddleX - paddleOffset, 0, effectivePaddleWidth, paddleHeight);
+
+    // プレイヤーのパドル
+    ctx.fillStyle = '#4ecdc4';
+    ctx.fillRect(playerPaddleX - paddleOffset, canvas.height - paddleHeight, effectivePaddleWidth, paddleHeight);
 
     // パックの描画
     ctx.beginPath();
