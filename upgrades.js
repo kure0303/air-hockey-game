@@ -261,6 +261,19 @@ class UpgradeManager {
         this.temporaryEffects.clear();
         this.matchCount = 0;
     }
+
+    // アップグレード効果の取得
+    getUpgradeEffect(type, effectName) {
+        let multiplier = 1.0;
+
+        for (const upgrade of this.activeUpgrades.values()) {
+            if (upgrade.type === type && upgrade.effect && upgrade.effect[effectName] !== undefined) {
+                multiplier *= upgrade.effect[effectName];
+            }
+        }
+
+        return multiplier;
+    }
 }
 
 // グローバルなアップグレードマネージャーのインスタンスを作成

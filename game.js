@@ -9,7 +9,6 @@ function resizeCanvas() {
     const container = canvas.parentElement;
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const containerWidth = container.clientWidth;
 
     // モバイルデバイスの場合
     if (isMobile) {
@@ -18,45 +17,43 @@ function resizeCanvas() {
         let targetWidth, targetHeight;
 
         if (isLandscape) {
-            targetHeight = Math.min(windowHeight * 0.8, 400);
-            targetWidth = targetHeight / 2;
+            targetHeight = Math.min(windowHeight * 0.8, 600);
+            targetWidth = targetHeight * 0.5;
         } else {
             targetWidth = Math.min(windowWidth * 0.95, 400);
             targetHeight = targetWidth * 2;
         }
 
-        // 実際のキャンバスサイズを設定
         canvas.width = targetWidth;
         canvas.height = targetHeight;
-
-        // 表示サイズを設定
         canvas.style.width = `${targetWidth}px`;
         canvas.style.height = `${targetHeight}px`;
     } else {
-        // PCの場合は従来通り
-        canvas.width = Math.min(400, containerWidth);
-        canvas.height = canvas.width * 2;
-        canvas.style.width = `${canvas.width}px`;
-        canvas.style.height = `${canvas.height}px`;
+        // PCの場合
+        const maxWidth = Math.min(800, windowWidth * 0.8);
+        const maxHeight = Math.min(windowHeight * 0.8, maxWidth * 2);
+
+        canvas.width = maxWidth;
+        canvas.height = maxHeight;
+        canvas.style.width = `${maxWidth}px`;
+        canvas.style.height = `${maxHeight}px`;
     }
 
-    // パドルとパックのサイズを更新
+    // ゲーム要素のサイズを更新
     paddleWidth = canvas.width * 0.15;
-    paddleHeight = canvas.width * 0.025;
-    puckSize = canvas.width * 0.0375;
+    paddleHeight = canvas.height * 0.02;
+    puckSize = canvas.width * 0.04;
 
     // パドルの位置を更新
     if (aiPaddleX === undefined) {
         aiPaddleX = canvas.width / 2 - paddleWidth / 2;
     } else {
-        // 既存のパドルの相対位置を維持
         aiPaddleX = (aiPaddleX / prevWidth) * canvas.width;
     }
 
     if (playerPaddleX === undefined) {
         playerPaddleX = canvas.width / 2 - paddleWidth / 2;
     } else {
-        // 既存のパドルの相対位置を維持
         playerPaddleX = (playerPaddleX / prevWidth) * canvas.width;
     }
 
@@ -69,6 +66,32 @@ function resizeCanvas() {
     // 現在のサイズを保存
     prevWidth = canvas.width;
     prevHeight = canvas.height;
+
+    // スタイルの更新
+    updateGameStyles();
+}
+
+// ゲームスタイルの更新
+function updateGameStyles() {
+    const screens = document.querySelectorAll('.screen');
+    screens.forEach(screen => {
+        screen.style.width = `${canvas.width * 0.8}px`;
+        screen.style.fontSize = `${canvas.width * 0.04}px`;
+    });
+
+    // スコアのスタイル更新
+    const scoreContainer = document.querySelector('.score-container');
+    if (scoreContainer) {
+        scoreContainer.style.fontSize = `${canvas.width * 0.05}px`;
+        scoreContainer.style.marginBottom = `${canvas.height * 0.02}px`;
+    }
+
+    // マッチ情報のスタイル更新
+    const matchInfo = document.querySelector('.match-info');
+    if (matchInfo) {
+        matchInfo.style.fontSize = `${canvas.width * 0.04}px`;
+        matchInfo.style.marginBottom = `${canvas.height * 0.02}px`;
+    }
 }
 
 // 前回のキャンバスサイズを保持
@@ -1017,13 +1040,15 @@ function safelyApplyEffect(effectFunction, ...args) {
 // ゲームの初期化
 window.onload = function () {
     try {
+        // 初期状態でスタート画面を表示
+        startScreen.classList.remove('hidden');
+
         resizeCanvas();
         effectSystem = new EffectSystem(ctx);
         resetGame();
         gameLoop();
     } catch (error) {
         console.error('Game initialization failed:', error);
-        // エラーメッセージを画面に表示
         const errorMessage = document.createElement('div');
         errorMessage.className = 'error-message';
         errorMessage.textContent = 'ゲームの初期化に失敗しました。ページを再読み込みしてください。';
