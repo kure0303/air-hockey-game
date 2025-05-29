@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>エアホッケー</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="score">
+            <span id="player1Score">0</span> - <span id="player2Score">0</span>
+        </div>
+
+        <!-- スタート画面 -->
+        <div id="startScreen" class="overlay">
+            <div class="menu-content">
+                <h1>エアホッケー</h1>
+                <p>5点先取で勝利！</p>
+                <button id="startButton">ゲームスタート</button>
+                <div class="controls">
+                    <p>操作方法:</p>
+                    <p class="desktop-controls">← →キーでパドルを動かす</p>
+                    <p class="mobile-controls">画面をスワイプしてパドルを動かす</p>
+                    <p class="desktop-controls">ESCキーで一時停止</p>
+                    <p class="mobile-controls">画面を2本指タップで一時停止</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 一時停止画面 -->
+        <div id="pauseScreen" class="overlay hidden">
+            <div class="menu-content">
+                <h2>一時停止中</h2>
+                <button id="resumeButton">ゲームを再開</button>
+                <button id="restartButton">最初からやり直す</button>
+            </div>
+        </div>
+
+        <!-- ゲーム終了画面 -->
+        <div id="gameOverScreen" class="overlay hidden">
+            <div class="menu-content">
+                <h2>ゲーム終了！</h2>
+                <p id="winnerMessage"></p>
+                <button id="playAgainButton">もう一度プレイ</button>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+
+</html>
