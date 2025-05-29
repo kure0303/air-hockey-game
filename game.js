@@ -10,66 +10,49 @@ let upgradeManager = null;
 
 // キャンバスのサイズ設定
 function resizeCanvas() {
-    const container = canvas.parentElement;
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-
-    // モバイルデバイスの場合
-    if (isMobile) {
-        // 画面の向きに応じて調整
-        const isLandscape = windowWidth > windowHeight;
-        let targetWidth, targetHeight;
-
-        if (isLandscape) {
-            targetHeight = Math.min(windowHeight * 0.8, 600);
-            targetWidth = targetHeight * 0.5;
-        } else {
-            targetWidth = Math.min(windowWidth * 0.95, 400);
-            targetHeight = targetWidth * 2;
-        }
-
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
-        canvas.style.width = `${targetWidth}px`;
-        canvas.style.height = `${targetHeight}px`;
-    } else {
-        // PCの場合
-        const maxWidth = Math.min(800, windowWidth * 0.8);
-        const maxHeight = Math.min(windowHeight * 0.8, maxWidth * 2);
-
-        canvas.width = maxWidth;
-        canvas.height = maxHeight;
-        canvas.style.width = `${maxWidth}px`;
-        canvas.style.height = `${maxHeight}px`;
+    // 16:9アスペクト比を維持
+    let targetWidth = windowWidth;
+    let targetHeight = windowWidth * 9 / 16;
+    if (targetHeight > windowHeight) {
+        targetHeight = windowHeight;
+        targetWidth = windowHeight * 16 / 9;
     }
+    // 前のサイズを保存
+    const prevW = canvas.width || targetWidth;
+    const prevH = canvas.height || targetHeight;
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    canvas.style.width = `${targetWidth}px`;
+    canvas.style.height = `${targetHeight}px`;
 
     // ゲーム要素のサイズを更新
     paddleWidth = canvas.width * 0.15;
     paddleHeight = canvas.height * 0.02;
     puckSize = canvas.width * 0.04;
 
-    // パドルの位置を更新
-    if (aiPaddleX === undefined) {
+    // パドル・パックの位置を比率で再配置
+    if (typeof aiPaddleX === 'number') {
+        aiPaddleX = (aiPaddleX / prevW) * canvas.width;
+    } else {
         aiPaddleX = canvas.width / 2 - paddleWidth / 2;
-    } else {
-        aiPaddleX = (aiPaddleX / prevWidth) * canvas.width;
     }
-
-    if (playerPaddleX === undefined) {
+    if (typeof playerPaddleX === 'number') {
+        playerPaddleX = (playerPaddleX / prevW) * canvas.width;
+    } else {
         playerPaddleX = canvas.width / 2 - paddleWidth / 2;
-    } else {
-        playerPaddleX = (playerPaddleX / prevWidth) * canvas.width;
+    }
+    if (puck && typeof puck.x === 'number' && typeof puck.y === 'number') {
+        puck.x = (puck.x / prevW) * canvas.width;
+        puck.y = (puck.y / prevH) * canvas.height;
+        puck.radius = puckSize / 2;
     }
 
-    // パックの位置を更新
-    if (puck.x !== undefined) {
-        puck.x = (puck.x / prevWidth) * canvas.width;
-        puck.y = (puck.y / prevHeight) * canvas.height;
-    }
-
-    // 現在のサイズを保存
-    prevWidth = canvas.width;
-    prevHeight = canvas.height;
+    // パドル・パックの初期化（リサイズ時も）
+    initializePaddles();
+    initializePuck();
 
     // スタイルの更新
     updateGameStyles();
