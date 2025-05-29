@@ -10,15 +10,39 @@ let upgradeManager = null;
 
 // キャンバスのサイズ設定
 function resizeCanvas() {
+    // ヘッダーの実際の高さを取得
+    const header = document.querySelector('.header');
+    const headerHeight = header ? header.offsetHeight : 0;
+
+    // 利用可能な画面サイズを計算（余白も考慮）
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    // コートの比率を1:1.6（幅:高さ）に設定
-    let targetWidth = windowWidth;
-    let targetHeight = windowWidth * 1.6;
-    if (targetHeight > windowHeight) {
-        targetHeight = windowHeight;
-        targetWidth = windowHeight / 1.6;
+    const padding = 20; // 上下左右の余白
+
+    // 実際に利用可能なサイズ
+    const availableWidth = windowWidth - (padding * 2);
+    const availableHeight = windowHeight - headerHeight - (padding * 2);
+
+    // 1:1.6の比率を維持しつつ、利用可能なエリアに収まる最大サイズを計算
+    let targetWidth = availableWidth;
+    let targetHeight = targetWidth * 1.6;
+
+    if (targetHeight > availableHeight) {
+        targetHeight = availableHeight;
+        targetWidth = targetHeight / 1.6;
     }
+
+    // さらに安全マージンを追加（5%縮小）
+    targetWidth = Math.floor(targetWidth * 0.95);
+    targetHeight = Math.floor(targetHeight * 0.95);
+
+    // 最小サイズの保証
+    const minWidth = 300;
+    const minHeight = minWidth * 1.6;
+
+    targetWidth = Math.max(targetWidth, minWidth);
+    targetHeight = Math.max(targetHeight, minHeight);
+
     // 前のサイズを保存
     const prevW = canvas.width || targetWidth;
     const prevH = canvas.height || targetHeight;
@@ -56,6 +80,8 @@ function resizeCanvas() {
 
     // スタイルの更新
     updateGameStyles();
+
+    console.log(`Canvas resized to: ${targetWidth}x${targetHeight}, Available: ${availableWidth}x${availableHeight}`);
 }
 
 // ゲームスタイルの更新
@@ -288,12 +314,21 @@ window.addEventListener('resize', () => {
     // リサイズ中の連続実行を防ぐ
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-        resizeCanvas();
-    }, 250);
+        // 小さな遅延を加えてヘッダーのレイアウトが確定してから実行
+        setTimeout(resizeCanvas, 50);
+    }, 100);
 });
 
 // 画面回転時の処理を追加
 window.addEventListener('orientationchange', () => {
+    // 向き変更後のレイアウト確定を待つ
+    setTimeout(() => {
+        resizeCanvas();
+    }, 300);
+});
+
+// 初期化時にも確実にリサイズ
+window.addEventListener('load', () => {
     setTimeout(resizeCanvas, 100);
 });
 
@@ -1392,9 +1427,11 @@ window.onload = function () {
             throw new Error('Failed to initialize game systems');
         }
 
-        // キャンバスのリサイズ
-        resizeCanvas();
-        console.log('Canvas resized');
+        // 初期リサイズ（少し遅延させてDOMが完全に構築されるのを待つ）
+        setTimeout(() => {
+            resizeCanvas();
+            console.log('Initial canvas resize completed');
+        }, 200);
 
         // ゲームの初期状態設定
         resetGame();
@@ -1408,7 +1445,7 @@ window.onload = function () {
         setTimeout(() => {
             requestAnimationFrame(gameLoop);
             console.log('Game loop started');
-        }, 100);
+        }, 300);
 
     } catch (error) {
         console.error('Critical error during game initialization:', error);
