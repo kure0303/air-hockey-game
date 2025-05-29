@@ -10,6 +10,7 @@ class EffectSystem {
             cleanupInterval: 1000, // ミリ秒
             boundaryPadding: 100 // 画面外の判定用パディング
         };
+        console.log('EffectSystem initialized');
 
         // 定期的なクリーンアップを設定
         this.cleanupInterval = setInterval(() => this.cleanup(), this.config.cleanupInterval);
@@ -48,8 +49,12 @@ class EffectSystem {
 
     // オーラエフェクトの作成
     createAuraEffect(x, y, visualEffect) {
-        if (!this.ctx || !visualEffect) return null;
+        if (!this.ctx || !visualEffect) {
+            console.warn('Invalid context or visual effect');
+            return null;
+        }
 
+        console.log('Creating aura effect:', x, y, visualEffect);
         const aura = {
             x,
             y,
@@ -64,20 +69,32 @@ class EffectSystem {
             this.activeEffects.add(aura);
             return aura;
         }
+        console.warn('Max effects limit reached');
         return null;
     }
 
     // 軌跡エフェクトの作成
     createTrailEffect(points, visualEffect) {
+        if (!this.ctx || !visualEffect || !points || points.length < 2) {
+            console.warn('Invalid trail effect parameters');
+            return null;
+        }
+
+        console.log('Creating trail effect:', points.length, 'points');
         const trail = {
             points: [...points],
-            colors: visualEffect.colors || [visualEffect.color],
+            colors: visualEffect.colors || [visualEffect.color || '#ffffff'],
             opacity: visualEffect.opacity || 1,
             width: visualEffect.trailWidth || 5,
-            type: EFFECT_TYPES.TRAIL
+            type: EFFECT_TYPES.TRAIL,
+            createdAt: Date.now()
         };
-        this.activeEffects.add(trail);
-        return trail;
+
+        if (this.activeEffects.size < this.config.maxEffects) {
+            this.activeEffects.add(trail);
+            return trail;
+        }
+        return null;
     }
 
     // パーティクルの作成
@@ -107,16 +124,23 @@ class EffectSystem {
 
     // フィールドエフェクトの作成（氷結フィールドなど）
     createFieldEffect(x, y, visualEffect) {
+        if (!this.ctx || !visualEffect) {
+            console.warn('Invalid field effect parameters');
+            return null;
+        }
+
+        console.log('Creating field effect:', x, y, visualEffect);
         const field = {
             x,
             y,
             radius: 0,
             maxRadius: visualEffect.fieldRadius || 100,
-            color: visualEffect.color,
+            color: visualEffect.color || '#ffffff',
             crystallize: visualEffect.crystallize || false,
             opacity: 1,
             type: EFFECT_TYPES.FIELD,
-            crystals: []
+            crystals: [],
+            createdAt: Date.now()
         };
 
         if (field.crystallize) {
@@ -132,53 +156,88 @@ class EffectSystem {
             }
         }
 
-        this.activeEffects.add(field);
-        return field;
+        if (this.activeEffects.size < this.config.maxEffects) {
+            this.activeEffects.add(field);
+            return field;
+        }
+        return null;
     }
 
     // エフェクトの更新
     update() {
-        // パーティクルの更新
-        this.particles = this.particles.filter(particle => {
-            particle.x += particle.dx;
-            particle.y += particle.dy;
-            particle.life -= 0.02;
-            particle.size *= 0.98;
-            return particle.life > 0;
-        });
+        try {
+            // パーティクルの更新
+            this.particles = this.particles.filter(particle => {
+                particle.x += particle.dx;
+                particle.y += particle.dy;
+                particle.life -= 0.02;
+                particle.size *= 0.98;
+                return particle.life > 0;
+            });
 
-        // アクティブエフェクトの更新
-        for (const effect of this.activeEffects) {
-            switch (effect.type) {
-                case EFFECT_TYPES.FIELD:
-                    if (effect.radius < effect.maxRadius) {
-                        effect.radius += effect.maxRadius * 0.1;
-                    }
-                    if (effect.crystallize) {
-                        effect.crystals.forEach(crystal => {
-                            if (crystal.length < crystal.maxLength) {
-                                crystal.length += crystal.maxLength * 0.1;
-                            }
-                        });
-                    }
-                    effect.opacity *= 0.99;
-                    if (effect.opacity < 0.01) {
+            // アクティブエフェクトの更新
+            for (const effect of this.activeEffects) {
+                if (!effect || !effect.type) {
+                    console.warn('Invalid effect found:', effect);
+                    this.activeEffects.delete(effect);
+                    continue;
+                }
+
+                switch (effect.type) {
+                    case EFFECT_TYPES.FIELD:
+                        this.updateFieldEffect(effect);
+                        break;
+                    case EFFECT_TYPES.AURA:
+                        this.updateAuraEffect(effect);
+                        break;
+                    case EFFECT_TYPES.TRAIL:
+                        this.updateTrailEffect(effect);
+                        break;
+                    default:
+                        console.warn('Unknown effect type:', effect.type);
                         this.activeEffects.delete(effect);
-                    }
-                    break;
-                case EFFECT_TYPES.AURA:
-                    effect.opacity *= 0.95;
-                    if (effect.opacity < 0.01) {
-                        this.activeEffects.delete(effect);
-                    }
-                    break;
-                case EFFECT_TYPES.TRAIL:
-                    effect.points.shift();
-                    if (effect.points.length < 2) {
-                        this.activeEffects.delete(effect);
-                    }
-                    break;
+                }
             }
+        } catch (error) {
+            console.error('Error in effect update:', error);
+        }
+    }
+
+    // フィールドエフェクトの更新
+    updateFieldEffect(effect) {
+        if (effect.radius < effect.maxRadius) {
+            effect.radius += effect.maxRadius * 0.1;
+        }
+        if (effect.crystallize) {
+            effect.crystals.forEach(crystal => {
+                if (crystal.length < crystal.maxLength) {
+                    crystal.length += crystal.maxLength * 0.1;
+                }
+            });
+        }
+        effect.opacity *= 0.99;
+        if (effect.opacity < 0.01) {
+            this.activeEffects.delete(effect);
+        }
+    }
+
+    // オーラエフェクトの更新
+    updateAuraEffect(effect) {
+        effect.opacity *= 0.95;
+        if (effect.opacity < 0.01) {
+            this.activeEffects.delete(effect);
+        }
+    }
+
+    // 軌跡エフェクトの更新
+    updateTrailEffect(effect) {
+        if (!effect.points || effect.points.length < 2) {
+            this.activeEffects.delete(effect);
+            return;
+        }
+        effect.points.shift();
+        if (effect.points.length < 2) {
+            this.activeEffects.delete(effect);
         }
     }
 
@@ -305,12 +364,14 @@ class EffectSystem {
 
     // 全てのエフェクトをクリア
     clearEffects() {
+        console.log('Clearing all effects');
         this.activeEffects.clear();
         this.particles = [];
     }
 
     // リソースの解放
     dispose() {
+        console.log('Disposing effect system');
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;

@@ -209,6 +209,7 @@ class UpgradeManager {
     }
 
     addUpgrade(upgrade) {
+        console.log('Adding upgrade:', upgrade);
         this.activeUpgrades.set(upgrade.id, upgrade);
     }
 
@@ -221,34 +222,61 @@ class UpgradeManager {
             .filter(upgrade => upgrade.type === type);
     }
 
-    // 特定のエフェクトタイプを持つアップグレードを取得
+    getUpgradeEffect(type, effectName) {
+        console.log('Getting effect:', type, effectName);
+        let multiplier = 1.0;
+
+        for (const upgrade of this.activeUpgrades.values()) {
+            if (upgrade.type === type && upgrade.effect && upgrade.effect[effectName] !== undefined) {
+                console.log('Found effect in upgrade:', upgrade.id, upgrade.effect[effectName]);
+                multiplier *= upgrade.effect[effectName];
+            }
+        }
+
+        console.log('Final multiplier:', multiplier);
+        return multiplier;
+    }
+
     getUpgradesWithEffectType(effectType) {
         return Array.from(this.activeUpgrades.values())
             .filter(upgrade => upgrade.visualEffect && upgrade.visualEffect.type === effectType);
     }
 
-    // 一時的な効果の追加（氷結フィールドなど）
     addTemporaryEffect(effectId, effect, duration) {
-        this.temporaryEffects.set(effectId, {
-            effect,
-            expiresAt: Date.now() + duration
-        });
+        console.log('Adding temporary effect:', effectId, effect, duration);
+        if (this.temporaryEffects.has(effectId)) {
+            clearTimeout(this.temporaryEffects.get(effectId).timeout);
+        }
 
-        setTimeout(() => {
+        const timeout = setTimeout(() => {
+            console.log('Removing temporary effect:', effectId);
             this.temporaryEffects.delete(effectId);
         }, duration);
+
+        this.temporaryEffects.set(effectId, {
+            effect,
+            expiresAt: Date.now() + duration,
+            timeout
+        });
     }
 
-    // 一時的な効果の確認
     hasTemporaryEffect(effectId) {
         const effect = this.temporaryEffects.get(effectId);
         if (!effect) return false;
 
         if (Date.now() > effect.expiresAt) {
+            console.log('Temporary effect expired:', effectId);
+            clearTimeout(effect.timeout);
             this.temporaryEffects.delete(effectId);
             return false;
         }
         return true;
+    }
+
+    getTemporaryEffect(effectId) {
+        const effect = this.temporaryEffects.get(effectId);
+        if (!effect || Date.now() > effect.expiresAt) return null;
+        return effect.effect;
     }
 
     incrementMatch() {
@@ -257,22 +285,16 @@ class UpgradeManager {
     }
 
     reset() {
+        console.log('Resetting upgrade manager');
+        // タイムアウトをクリア
+        for (const effect of this.temporaryEffects.values()) {
+            if (effect.timeout) {
+                clearTimeout(effect.timeout);
+            }
+        }
         this.activeUpgrades.clear();
         this.temporaryEffects.clear();
         this.matchCount = 0;
-    }
-
-    // アップグレード効果の取得
-    getUpgradeEffect(type, effectName) {
-        let multiplier = 1.0;
-
-        for (const upgrade of this.activeUpgrades.values()) {
-            if (upgrade.type === type && upgrade.effect && upgrade.effect[effectName] !== undefined) {
-                multiplier *= upgrade.effect[effectName];
-            }
-        }
-
-        return multiplier;
     }
 }
 
