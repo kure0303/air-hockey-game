@@ -208,7 +208,7 @@ let puck = {
     targetDy: 0, // 目標速度Y
     lastX: 0, // 前フレームの位置X
     lastY: 0, // 前フレームの位置Y
-    smoothingFactor: 0.12 // イージング強度（0.1-0.3）調整でより滑らか
+    smoothingFactor: 0.08 // イージング強度を弱く（反応性重視）
 };
 
 // パックの軌跡を保存
@@ -605,25 +605,30 @@ function applyPuckEasing() {
     const speedDiffX = puck.targetDx - puck.dx;
     const speedDiffY = puck.targetDy - puck.dy;
 
-    // 高速時はより強いイージングを適用
+    // 目標速度との差が小さい場合はイージングを強く、大きい場合は弱く
+    const speedDiff = Math.sqrt(speedDiffX * speedDiffX + speedDiffY * speedDiffY);
     const currentSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
-    const speedRatio = Math.min(currentSpeed / MAX_PUCK_SPEED, 1.0);
-    const dynamicSmoothing = puck.smoothingFactor * (1 + speedRatio * 0.5);
+
+    // 速度差に応じてイージング強度を調整
+    let dynamicSmoothing = puck.smoothingFactor;
+    if (speedDiff > 2) {
+        // 大きな速度変化の場合はより積極的に変化
+        dynamicSmoothing = Math.min(0.3, puck.smoothingFactor * 2);
+    } else if (currentSpeed > MAX_PUCK_SPEED * 0.7) {
+        // 高速時のみスムージングを適用
+        dynamicSmoothing = puck.smoothingFactor * 1.2;
+    }
 
     // イージングを適用（目標速度に向かって徐々に変化）
     puck.dx += speedDiffX * dynamicSmoothing;
     puck.dy += speedDiffY * dynamicSmoothing;
 
-    // 急激な速度変化を制限
-    const maxSpeedChange = 0.6; // 1フレームあたりの最大速度変化（より滑らかに）
-    const actualChangeX = puck.dx - (puck.lastX !== undefined ? (puck.x - puck.lastX) : 0);
-    const actualChangeY = puck.dy - (puck.lastY !== undefined ? (puck.y - puck.lastY) : 0);
-
-    if (Math.abs(actualChangeX) > maxSpeedChange) {
-        puck.dx = (puck.lastX !== undefined ? (puck.x - puck.lastX) : 0) + Math.sign(actualChangeX) * maxSpeedChange;
+    // 最小変化量を保証（完全に停止しないように）
+    if (Math.abs(speedDiffX) > 0.1 && Math.abs(speedDiffX * dynamicSmoothing) < 0.05) {
+        puck.dx += Math.sign(speedDiffX) * 0.05;
     }
-    if (Math.abs(actualChangeY) > maxSpeedChange) {
-        puck.dy = (puck.lastY !== undefined ? (puck.y - puck.lastY) : 0) + Math.sign(actualChangeY) * maxSpeedChange;
+    if (Math.abs(speedDiffY) > 0.1 && Math.abs(speedDiffY * dynamicSmoothing) < 0.05) {
+        puck.dy += Math.sign(speedDiffY) * 0.05;
     }
 }
 
@@ -827,8 +832,15 @@ function movePuck() {
         puck.spin *= puck.spinDecay;
     }
 
-    // イージングを適用
-    applyPuckEasing();
+    // イージングを適用（高速時のみ）
+    const currentSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
+    if (currentSpeed > MAX_PUCK_SPEED * 0.6) {
+        applyPuckEasing();
+    } else {
+        // 低速時は目標速度を直接適用
+        puck.dx = puck.targetDx;
+        puck.dy = puck.targetDy;
+    }
 
     // パックの移動
     puck.x += puck.dx;
@@ -1407,12 +1419,12 @@ function resetForNextMatch() {
 function initializePuck() {
     puck.x = canvas.width / 2;
     puck.y = canvas.height / 2;
-    // 初期速度を少し遅めに設定
+    // 初期速度を適切に設定
     const angle = Math.PI / 4; // 45度
-    const slowInitialSpeed = INITIAL_PUCK_SPEED * 0.8; // 初期速度を20%減
-    puck.dx = slowInitialSpeed * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
-    puck.dy = slowInitialSpeed * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1);
-    // 目標速度も初期化
+    const initialSpeed = INITIAL_PUCK_SPEED; // 初期速度を元に戻す
+    puck.dx = initialSpeed * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
+    puck.dy = initialSpeed * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1);
+    // 目標速度も同じに設定
     puck.targetDx = puck.dx;
     puck.targetDy = puck.dy;
     puck.lastX = puck.x;
@@ -1801,9 +1813,9 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     let angleAdjustment = 1.0;
 
     // テクニック判定
-    const centerHitThreshold = 0.25; // パドル中心の範囲（少し拡大）
-    const slideThreshold = 2.5; // スライドショットの最低速度（少し下げる）
-    const angleThreshold = 3.5; // アングルショットの最低速度（少し下げる）
+    const centerHitThreshold = 0.3; // パドル中心の範囲（さらに拡大）
+    const slideThreshold = 2.0; // スライドショットの最低速度（さらに下げる）
+    const angleThreshold = 3.0; // アングルショットの最低速度（さらに下げる）
 
     let shotType = 'normal';
     let isCritical = false;
@@ -1886,11 +1898,17 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     puck.targetDx = Math.sin(angle) * newSpeed;
     puck.targetDy = (isTopPaddle ? 1 : -1) * Math.cos(angle) * newSpeed;
 
-    // 即座に反映する必要がある場合のみ直接設定
-    const immediateReflection = isCritical || Math.abs(speedMultiplier - 1.0) > 0.5;
+    // イージングを適用しない場合（即座に反映）
+    const immediateReflection = isCritical || isAngle || Math.abs(speedMultiplier - 1.0) > 0.3;
     if (immediateReflection) {
         puck.dx = puck.targetDx;
         puck.dy = puck.targetDy;
+    } else {
+        // スライドショットなど、滑らかに変化させたい場合のみイージング
+        // 初期の変化は大きめに設定
+        const initialChange = 0.4;
+        puck.dx += (puck.targetDx - puck.dx) * initialChange;
+        puck.dy += (puck.targetDy - puck.dy) * initialChange;
     }
 
     puck.y = isTopPaddle ? (paddleY + paddleHeight + puck.radius) : (paddleY - puck.radius);
