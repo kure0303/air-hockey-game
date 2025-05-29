@@ -77,9 +77,8 @@ function resizeCanvas() {
         puck.radius = puckSize / 2;
     }
 
-    // パドル・パックの初期化（リサイズ時も）
+    // パドルの初期化のみ（パックの初期化は削除）
     initializePaddles();
-    initializePuck();
 
     // スタイルの更新
     updateGameStyles();
@@ -422,7 +421,6 @@ function resetGame() {
     currentState = GAME_STATE.START;
     updateScore();
     initializePaddles();
-    initializePuck();
 
     // 全ての画面を非表示
     pauseScreen.classList.add('hidden');
@@ -633,7 +631,7 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
     }
 
     // プレイヤーのパドルのみにアップグレード効果を適用
-    const activeEffects = isTopPaddle ? [] : Array.from(upgradeManager.activeUpgrades.values());
+    const activeEffects = isTopPaddle ? [] : upgradeManager.upgradeInstances;
 
     let baseSpeed = Math.sqrt(puck.dx * puck.dx + puck.dy * puck.dy);
     let speedMultiplier = 1.0;
@@ -768,7 +766,7 @@ function movePuck() {
 
     // ステルス・スネイクの効果による蛇行
     if (puck.activeEffects.has('stealth') && upgradeManager) {
-        const stealthUpgrade = upgradeManager.activeUpgrades.get('stealthSnake');
+        const stealthUpgrade = upgradeManager.upgradeInstances.find(u => u.id === 'stealthSnake');
         if (stealthUpgrade) {
             const time = Date.now() / 1000;
             puck.dx += Math.sin(time * stealthUpgrade.effect.sineFrequency) *
@@ -820,7 +818,7 @@ function movePuck() {
 function handleWallCollision(x, y) {
     // 氷結フィールドの効果
     if (puck.activeEffects.has('ice')) {
-        const iceUpgrade = upgradeManager.activeUpgrades.get('iceFieldShot');
+        const iceUpgrade = upgradeManager.upgradeInstances.find(u => u.id === 'iceFieldShot');
         if (iceUpgrade) {
             effectSystem.createFieldEffect(x, y, iceUpgrade.visualEffect);
             // 一時的な速度低下効果を追加
@@ -840,7 +838,7 @@ function handleGoal(isAiScore) {
 
         // 破滅への誘引の効果
         if (puck.activeEffects.has('doom')) {
-            const doomUpgrade = upgradeManager.activeUpgrades.get('doomInducement');
+            const doomUpgrade = upgradeManager.upgradeInstances.find(u => u.id === 'doomInducement');
             if (doomUpgrade) {
                 upgradeManager.addTemporaryEffect('nullification', {
                     factor: doomUpgrade.effect.weakenFactor
@@ -935,7 +933,7 @@ function draw() {
     drawPuck();
 
     // 壁反射ガイドの描画
-    if (upgradeManager && upgradeManager.hasUpgrade('wallGuideWeak')) {
+    if (upgradeManager && upgradeManager.upgradeInstances.some(u => u.id === 'wallGuideWeak')) {
         drawWallGuide();
     }
 }
@@ -975,7 +973,7 @@ function drawPuck() {
 
 // 壁反射ガイドの描画
 function drawWallGuide() {
-    const guide = upgradeManager.activeUpgrades.get('wallGuideWeak');
+    const guide = upgradeManager.upgradeInstances.find(u => u.id === 'wallGuideWeak');
     if (!guide || puck.y > canvas.height * 0.7) return;
 
     const futureX = puck.x + puck.dx * 10;
