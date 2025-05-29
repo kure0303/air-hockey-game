@@ -14,12 +14,15 @@
         <div class="score">
             <span id="player1Score">0</span> - <span id="player2Score">0</span>
         </div>
+        <div class="match-info">
+            試合 <span id="currentMatch">1</span>/3
+        </div>
 
         <!-- スタート画面 -->
         <div id="startScreen" class="overlay">
             <div class="menu-content">
                 <h1>エアホッケー</h1>
-                <p>5点先取で勝利！</p>
+                <p>3試合の合計得点を競います！</p>
                 <button id="startButton">ゲームスタート</button>
                 <div class="controls">
                     <p>操作方法:</p>
@@ -27,6 +30,20 @@
                     <p class="mobile-controls">画面をスワイプしてパドルを動かす</p>
                     <p class="desktop-controls">ESCキーで一時停止</p>
                     <p class="mobile-controls">画面を2本指タップで一時停止</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- アップグレード選択画面 -->
+        <div id="upgradeScreen" class="overlay hidden">
+            <div class="menu-content upgrade-menu">
+                <h2>アップグレードを選択</h2>
+                <div class="upgrade-choices">
+                    <!-- アップグレードの選択肢がここに動的に追加されます -->
+                </div>
+                <div class="match-summary">
+                    <p>前回の試合スコア: <span id="lastMatchScore">0 - 0</span></p>
+                    <p>総合スコア: <span id="totalScore">0 - 0</span></p>
                 </div>
             </div>
         </div>
@@ -45,10 +62,14 @@
             <div class="menu-content">
                 <h2>ゲーム終了！</h2>
                 <p id="winnerMessage"></p>
+                <div class="final-score">
+                    <p>最終スコア: <span id="finalScore">0 - 0</span></p>
+                </div>
                 <button id="playAgainButton">もう一度プレイ</button>
             </div>
         </div>
     </div>
+    <script src="upgrades.js"></script>
     <script src="game.js"></script>
 </body>
 

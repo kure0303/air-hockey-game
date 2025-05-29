@@ -217,3 +217,90 @@ button:hover {
         transform: translateX(-50%);
     }
 }
+
+.match-info {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.9em;
+    color: #333;
+}
+
+.upgrade-menu {
+    width: 90%;
+    max-width: 600px;
+}
+
+.upgrade-choices {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.upgrade-choice {
+    background-color: #f8f8f8;
+    border: 2px solid #4ecdc4;
+    padding: 15px;
+    width: calc(100% - 30px);
+    max-width: 300px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.upgrade-choice:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    background-color: #fff;
+}
+
+.upgrade-choice h3 {
+    color: #333;
+    margin: 0 0 10px 0;
+    font-size: 1.2em;
+}
+
+.upgrade-choice p {
+    color: #666;
+    margin: 0;
+    font-size: 0.9em;
+}
+
+.upgrade-choice.rarity-2 {
+    border-color: #ffd700;
+}
+
+.upgrade-choice.rarity-3 {
+    border-color: #ff6b6b;
+}
+
+.match-summary {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+.match-summary p {
+    margin: 5px 0;
+    color: #666;
+}
+
+/* モバイル向けの調整 */
+@media (max-width: 480px) {
+    .upgrade-choice {
+        padding: 10px;
+        font-size: 0.9em;
+    }
+
+    .upgrade-choice h3 {
+        font-size: 1.1em;
+    }
+
+    .match-info {
+        font-size: 0.8em;
+    }
+}
