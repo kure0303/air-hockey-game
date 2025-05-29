@@ -12,12 +12,12 @@ let upgradeManager = null;
 function resizeCanvas() {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    // 16:9アスペクト比を維持
+    // 元の比率に戻す（4:3）
     let targetWidth = windowWidth;
-    let targetHeight = windowWidth * 9 / 16;
+    let targetHeight = windowWidth * 3 / 4;
     if (targetHeight > windowHeight) {
         targetHeight = windowHeight;
-        targetWidth = windowHeight * 16 / 9;
+        targetWidth = windowHeight * 4 / 3;
     }
     // 前のサイズを保存
     const prevW = canvas.width || targetWidth;
@@ -783,7 +783,7 @@ function resetPuck(aiServe) {
     puck.y = canvas.height / 2;
     puck.radius = puckSize / 2;
 
-    // 初速を設定
+    // 初期速度を設定
     const angle = Math.PI / 4; // 45度
     puck.dx = INITIAL_PUCK_SPEED * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
     puck.dy = INITIAL_PUCK_SPEED * Math.sin(angle) * (aiServe ? 1 : -1);
@@ -1101,8 +1101,10 @@ function resetForNextMatch() {
 function initializePuck() {
     puck.x = canvas.width / 2;
     puck.y = canvas.height / 2;
-    puck.dx = 0;
-    puck.dy = 0;
+    // 初期速度を設定
+    const angle = Math.PI / 4; // 45度
+    puck.dx = INITIAL_PUCK_SPEED * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
+    puck.dy = INITIAL_PUCK_SPEED * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1);
     puck.radius = puckSize / 2;
     puck.activeEffects.clear();
     puck.lastHitTime = 0;
