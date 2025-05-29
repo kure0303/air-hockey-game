@@ -12,12 +12,12 @@ let upgradeManager = null;
 function resizeCanvas() {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    // 元の比率に戻す（4:3）
+    // 縦長の比率（3:4）に設定
     let targetWidth = windowWidth;
-    let targetHeight = windowWidth * 3 / 4;
+    let targetHeight = windowWidth * 4 / 3;
     if (targetHeight > windowHeight) {
         targetHeight = windowHeight;
-        targetWidth = windowHeight * 4 / 3;
+        targetWidth = windowHeight * 3 / 4;
     }
     // 前のサイズを保存
     const prevW = canvas.width || targetWidth;
