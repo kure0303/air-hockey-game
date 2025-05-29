@@ -274,7 +274,9 @@ playAgainButton.addEventListener('click', resetGame);
 function startGame() {
     currentState = GAME_STATE.PLAYING;
     startScreen.classList.add('hidden');
-    resetGame();
+    resetPuck(false);
+    initializePaddles();
+    updateScore();
 }
 
 // ゲームの一時停止
@@ -678,6 +680,47 @@ function initializePaddles() {
     aiPaddleX = canvas.width / 2 - paddleWidth / 2;
     playerPaddleX = canvas.width / 2 - paddleWidth / 2;
 }
+
+// アップグレードの種類
+const UPGRADE_TYPES = {
+    PADDLE: 'paddle',
+    PUCK: 'puck',
+    SPECIAL: 'special'
+};
+
+// アップグレードマネージャー
+const upgradeManager = {
+    matchCount: 0,
+    activeUpgrades: new Map(),
+
+    reset() {
+        this.matchCount = 0;
+        this.activeUpgrades.clear();
+    },
+
+    incrementMatch() {
+        this.matchCount++;
+        return this.matchCount;
+    },
+
+    addUpgrade(upgrade) {
+        this.activeUpgrades.set(upgrade.id, upgrade);
+    },
+
+    hasUpgrade(upgradeId) {
+        return this.activeUpgrades.has(upgradeId);
+    },
+
+    getUpgradeEffect(type, effectName) {
+        let multiplier = 1;
+        this.activeUpgrades.forEach(upgrade => {
+            if (upgrade.type === type && upgrade.effect[effectName]) {
+                multiplier *= upgrade.effect[effectName];
+            }
+        });
+        return multiplier;
+    }
+};
 
 // 初期化
 resizeCanvas();
