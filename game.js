@@ -561,8 +561,8 @@ function limitPuckSpeed() {
         puck.dy *= ratio;
     }
 
-    // 最低速度も保証
-    const minSpeed = INITIAL_PUCK_SPEED * 0.5;
+    // 最低速度を少し下げて、よりゆっくりとした動きを許可
+    const minSpeed = INITIAL_PUCK_SPEED * 0.3; // 最低速度をさらに下げる
     if (currentSpeed < minSpeed && currentSpeed > 0) {
         const ratio = minSpeed / currentSpeed;
         puck.dx *= ratio;
@@ -874,12 +874,13 @@ function resetPuck(aiServe) {
     puck.y = canvas.height / 2;
     puck.radius = puckSize / 2;
 
-    // ゴール後は低速でゆっくりと決められた側に向かう
-    const GOAL_RESET_SPEED = 3; // 通常の半分以下の速度
-    const angle = Math.PI / 6; // 30度（より浅い角度）
+    // ゴール後はさらに低速でゆっくりと中央に向かう
+    const GOAL_RESET_SPEED = 2; // さらに遅い速度
+    const angle = Math.PI / 8; // 22.5度（より浅い角度で中央寄り）
 
-    puck.dx = GOAL_RESET_SPEED * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1);
-    puck.dy = GOAL_RESET_SPEED * Math.cos(angle) * (aiServe ? 1 : -1);
+    // 水平方向の動きを小さくして、より中央に向かうように
+    puck.dx = GOAL_RESET_SPEED * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1) * 0.7; // 水平速度を30%減
+    puck.dy = GOAL_RESET_SPEED * Math.cos(angle) * (aiServe ? 1 : -1); // 垂直方向は維持
 
     // エフェクトをクリア
     puck.activeEffects.clear();
@@ -1243,10 +1244,11 @@ function resetForNextMatch() {
 function initializePuck() {
     puck.x = canvas.width / 2;
     puck.y = canvas.height / 2;
-    // 初期速度を設定
+    // 初期速度を少し遅めに設定
     const angle = Math.PI / 4; // 45度
-    puck.dx = INITIAL_PUCK_SPEED * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
-    puck.dy = INITIAL_PUCK_SPEED * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1);
+    const slowInitialSpeed = INITIAL_PUCK_SPEED * 0.8; // 初期速度を20%減
+    puck.dx = slowInitialSpeed * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
+    puck.dy = slowInitialSpeed * Math.sin(angle) * (Math.random() < 0.5 ? 1 : -1);
     puck.radius = puckSize / 2;
     puck.activeEffects.clear();
     puck.lastHitTime = 0;
