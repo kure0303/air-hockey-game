@@ -319,10 +319,15 @@ playAgainButton.addEventListener('click', resetGame);
 // ゲーム開始
 function startGame() {
     currentState = GAME_STATE.PLAYING;
-    startScreen.classList.add('hidden');
-    resetPuck(false);
+    document.getElementById('startScreen').classList.add('hidden');
+    initializePuck();
     initializePaddles();
-    updateScore();
+    resizeCanvas();
+    requestAnimationFrame(gameLoop);
+
+    // エフェクトシステムとアップグレードマネージャーのリセット
+    effectSystem.clearEffects();
+    upgradeManager.reset();
 }
 
 // ゲームの一時停止
@@ -604,6 +609,33 @@ function handlePaddleCollision(paddleX, paddleY, isTopPaddle, effectivePaddleWid
 
     // パックの速度を制限
     limitPuckSpeed();
+
+    // アップグレードエフェクトの適用
+    if (puck.lastHitUpgrade) {
+        const effect = upgradeManager.getUpgradeEffect(puck.lastHitUpgrade.type, 'speedBoostMultiplier');
+        if (effect) {
+            puck.dx *= effect;
+            puck.dy *= effect;
+        }
+
+        // ビジュアルエフェクトの作成
+        if (puck.lastHitUpgrade.visualEffect) {
+            const effectX = puck.x;
+            const effectY = puck.y;
+
+            switch (puck.lastHitUpgrade.visualEffect.type) {
+                case EFFECT_TYPES.AURA:
+                    effectSystem.createAuraEffect(effectX, effectY, puck.lastHitUpgrade.visualEffect);
+                    break;
+                case EFFECT_TYPES.TRAIL:
+                    effectSystem.createTrailEffect(puckTrail, puck.lastHitUpgrade.visualEffect);
+                    break;
+                case EFFECT_TYPES.IMPACT:
+                    effectSystem.createParticles(effectX, effectY, puck.lastHitUpgrade.visualEffect);
+                    break;
+            }
+        }
+    }
 }
 
 // パックの移動と衝突判定
@@ -723,9 +755,7 @@ function resetPuck(aiServe) {
 
 // 描画関数
 function draw() {
-    // キャンバスのクリア
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // エフェクトシステムの更新と描画
     effectSystem.update();
@@ -911,16 +941,45 @@ function showUpgradeScreen() {
     // 選択肢をクリア
     upgradeChoices.innerHTML = '';
 
-    // 新しい選択肢を生成
+    // 新しい選択肢を生成（3つ）
     const choices = generateUpgradeChoices(3);
     choices.forEach(upgrade => {
         const choice = document.createElement('div');
-        choice.className = `upgrade-choice rarity-${upgrade.rarity}`;
+        choice.className = `upgrade-choice rarity-${upgrade.type.toLowerCase()}`;
+
+        // アップグレードの詳細情報を表示
+        let effectDescription = '';
+        if (upgrade.effect) {
+            const effects = [];
+            if (upgrade.effect.puckSpeedMultiplier) effects.push(`パックの速度 x${upgrade.effect.puckSpeedMultiplier}`);
+            if (upgrade.effect.knockbackPower) effects.push(`ノックバック威力 x${upgrade.effect.knockbackPower}`);
+            if (upgrade.effect.speedBoostMultiplier) effects.push(`速度ブースト x${upgrade.effect.speedBoostMultiplier}`);
+            if (upgrade.effect.slowdownFactor) effects.push(`減速効果 x${upgrade.effect.slowdownFactor}`);
+            if (effects.length > 0) {
+                effectDescription = `<div class="effect-details">${effects.join('<br>')}</div>`;
+            }
+        }
+
         choice.innerHTML = `
             <h3>${upgrade.name}</h3>
             <p>${upgrade.description}</p>
+            ${effectDescription}
+            <div class="upgrade-type">${upgrade.type}</div>
         `;
-        choice.addEventListener('click', () => selectUpgrade(upgrade));
+
+        // エフェクトのプレビュー表示
+        if (upgrade.visualEffect) {
+            const preview = document.createElement('div');
+            preview.className = 'effect-preview';
+            preview.style.backgroundColor = upgrade.visualEffect.color || '#ffffff';
+            preview.style.opacity = '0.7';
+            choice.appendChild(preview);
+        }
+
+        choice.addEventListener('click', () => {
+            console.log('Selected upgrade:', upgrade);
+            selectUpgrade(upgrade);
+        });
         upgradeChoices.appendChild(choice);
     });
 
@@ -929,9 +988,13 @@ function showUpgradeScreen() {
 
 // アップグレードの選択
 function selectUpgrade(upgrade) {
-    upgradeManager.addUpgrade(upgrade);
-    document.getElementById('upgradeScreen').classList.add('hidden');
-    resetForNextMatch();
+    console.log('Processing upgrade selection:', upgrade.name);
+
+    if (applyUpgrade(upgrade)) {
+        // アップグレード画面を閉じて次の試合を準備
+        document.getElementById('upgradeScreen').classList.add('hidden');
+        resetForNextMatch();
+    }
 }
 
 // 次の試合の準備
@@ -969,19 +1032,25 @@ function initializePaddles() {
 
 // ゲームの終了処理
 function cleanup() {
-    if (effectSystem) {
-        effectSystem.dispose();
-    }
     // イベントリスナーの削除
     window.removeEventListener('resize', handleResize);
     window.removeEventListener('orientationchange', handleOrientationChange);
-    if (isMobile) {
-        canvas.removeEventListener('touchstart', handleTouchStart);
-        canvas.removeEventListener('touchmove', handleTouchMove);
-        canvas.removeEventListener('touchend', handleTouchEnd);
-    } else {
-        document.removeEventListener('keydown', handleKeyDown);
-        document.removeEventListener('keyup', handleKeyUp);
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('keyup', handleKeyUp);
+
+    // タッチイベントの削除
+    canvas.removeEventListener('touchstart', handleTouchStart);
+    canvas.removeEventListener('touchmove', handleTouchMove);
+    canvas.removeEventListener('touchend', handleTouchEnd);
+
+    // エフェクトシステムの破棄
+    if (effectSystem) {
+        effectSystem.dispose();
+    }
+
+    // アップグレードマネージャーのリセット
+    if (upgradeManager) {
+        upgradeManager.reset();
     }
 }
 
@@ -1037,22 +1106,151 @@ function safelyApplyEffect(effectFunction, ...args) {
     return null;
 }
 
-// ゲームの初期化
+// エフェクトシステムとアップグレードマネージャーの初期化
+let effectSystem;
+let upgradeManager;
+
+// 初期化関数
+function initializeGameSystems() {
+    console.log('Initializing game systems...');
+    try {
+        // エフェクトシステムの初期化
+        if (effectSystem) {
+            effectSystem.dispose();
+        }
+        effectSystem = new EffectSystem(ctx);
+        console.log('Effect system initialized');
+
+        // アップグレードマネージャーの初期化
+        if (upgradeManager) {
+            upgradeManager.reset();
+        }
+        upgradeManager = new UpgradeManager();
+        console.log('Upgrade manager initialized');
+
+        return true;
+    } catch (error) {
+        console.error('Failed to initialize game systems:', error);
+        showErrorMessage('ゲームシステムの初期化に失敗しました。');
+        return false;
+    }
+}
+
+// エラーメッセージの表示
+function showErrorMessage(message, duration = 5000) {
+    const existingError = document.querySelector('.error-message');
+    if (existingError) {
+        existingError.remove();
+    }
+
+    const errorMessage = document.createElement('div');
+    errorMessage.className = 'error-message';
+    errorMessage.textContent = message;
+    document.body.appendChild(errorMessage);
+
+    setTimeout(() => {
+        errorMessage.classList.add('fade-out');
+        setTimeout(() => errorMessage.remove(), 500);
+    }, duration);
+}
+
+// エフェクトの適用を最適化
+function applyEffects(x, y, effects) {
+    if (!effectSystem || !effects) return;
+
+    const batchedEffects = effects.reduce((acc, effect) => {
+        if (!acc[effect.type]) {
+            acc[effect.type] = [];
+        }
+        acc[effect.type].push(effect);
+        return acc;
+    }, {});
+
+    Object.entries(batchedEffects).forEach(([type, typeEffects]) => {
+        try {
+            switch (type) {
+                case EFFECT_TYPES.AURA:
+                    typeEffects.forEach(effect =>
+                        safelyApplyEffect('createAuraEffect', x, y, effect.visualEffect));
+                    break;
+                case EFFECT_TYPES.TRAIL:
+                    typeEffects.forEach(effect =>
+                        safelyApplyEffect('createTrailEffect', puckTrail, effect.visualEffect));
+                    break;
+                case EFFECT_TYPES.IMPACT:
+                    typeEffects.forEach(effect =>
+                        safelyApplyEffect('createParticles', x, y, effect.visualEffect));
+                    break;
+                case EFFECT_TYPES.FIELD:
+                    typeEffects.forEach(effect =>
+                        safelyApplyEffect('createFieldEffect', x, y, effect.visualEffect));
+                    break;
+            }
+        } catch (error) {
+            console.warn(`Failed to apply ${type} effects:`, error);
+        }
+    });
+}
+
+// アップグレードの適用を最適化
+function applyUpgrade(upgrade) {
+    if (!upgrade) return;
+
+    console.log('Applying upgrade:', upgrade.name);
+    try {
+        // アップグレードの基本効果を適用
+        upgradeManager.addUpgrade(upgrade);
+
+        // ビジュアルエフェクトを適用
+        if (upgrade.visualEffect) {
+            applyEffects(puck.x, puck.y, [upgrade]);
+        }
+
+        // 特殊効果の初期化
+        if (upgrade.effect) {
+            if (upgrade.effect.initialEffect) {
+                safelyApplyEffect(upgrade.effect.initialEffect.type,
+                    puck.x, puck.y, upgrade.effect.initialEffect);
+            }
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Failed to apply upgrade:', error);
+        showErrorMessage('アップグレードの適用に失敗しました。');
+        return false;
+    }
+}
+
+// ゲームの初期化を改善
 window.onload = function () {
     try {
-        // 初期状態でスタート画面を表示
-        startScreen.classList.remove('hidden');
+        console.log('Initializing game...');
 
+        // システムの初期化
+        if (!initializeGameSystems()) {
+            throw new Error('Failed to initialize game systems');
+        }
+
+        // キャンバスのリサイズ
         resizeCanvas();
-        effectSystem = new EffectSystem(ctx);
+        console.log('Canvas resized');
+
+        // ゲームの初期状態設定
         resetGame();
-        gameLoop();
+        console.log('Game reset');
+
+        // スタート画面の表示
+        startScreen.classList.remove('hidden');
+        console.log('Start screen displayed');
+
+        // ゲームループの開始
+        requestAnimationFrame(gameLoop);
+        console.log('Game loop started');
+
     } catch (error) {
-        console.error('Game initialization failed:', error);
-        const errorMessage = document.createElement('div');
-        errorMessage.className = 'error-message';
-        errorMessage.textContent = 'ゲームの初期化に失敗しました。ページを再読み込みしてください。';
-        document.body.appendChild(errorMessage);
+        console.error('Critical error during game initialization:', error);
+        showErrorMessage('致命的なエラーが発生しました。ページを再読み込みしてください。');
     }
 };
 
