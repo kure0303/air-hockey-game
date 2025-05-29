@@ -380,5 +380,3 @@ class EffectSystem {
     }
 }
 
-// エフェクトシステムのインスタンスを作成
-let effectSystem;
